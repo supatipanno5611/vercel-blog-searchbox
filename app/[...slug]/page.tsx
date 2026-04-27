@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import { posts } from '#site/content'
 import { MDXContent } from '@/app/components/MDXContent'
-import ReadingHeader from '@/app/components/ReadingHeader'
+import Header from '@/app/components/Header'
 import styles from './page.module.css'
 
 type Props = {
@@ -29,7 +29,7 @@ export default async function PostPage({ params }: Props) {
 
   return (
     <main className={styles.main}>
-      <ReadingHeader title={post.title} />
+      <Header title={post.title} />
       <article className={styles.article}>
         <MDXContent code={post.body} />
       </article>

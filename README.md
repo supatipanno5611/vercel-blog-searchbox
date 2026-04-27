@@ -1,4 +1,4 @@
-# sakko
+# my-blog
 
 Next.js 기반의 한국어 블로그/위키 템플릿입니다. MDX 콘텐츠, 한국어 전문 검색, Obsidian 스타일 문법을 지원합니다.
 

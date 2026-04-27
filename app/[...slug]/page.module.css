@@ -2,12 +2,12 @@
   max-width: 680px;
   margin: 0 auto;
   /* 56px fixed header + 72px gap ≈ original header spacing */
-  padding: 128px 24px 120px;
+  padding: calc(120px + env(safe-area-inset-top)) 24px 120px;
 }
 
 @media (max-width: 600px) {
   .main {
-    padding: 108px 20px 80px;
+    padding: calc(100px + env(safe-area-inset-top)) 20px 80px;
   }
 }
 

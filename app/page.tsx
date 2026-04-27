@@ -1,23 +1,31 @@
-import { Suspense } from 'react'
-import { pages } from '#site/content'
+import { notFound } from 'next/navigation'
+import { posts } from '#site/content'
 import { MDXContent } from '@/app/components/MDXContent'
+import Header from '@/app/components/Header'
 import styles from './page.module.css'
-import SearchBox from './components/SearchBox'
+
+const FOOTER_LINKS = [
+  { slug: '사용-안내', label: '사용 안내' },
+  { slug: '웹사이트에-기여한-사람들', label: '웹사이트에 기여한 사람들' },
+]
 
 export default function HomePage() {
-  const home = pages.find((p) => p.name === 'home')
+  const home = posts.find((p) => p.slugAsParams === 'home')
+  if (!home) notFound()
 
   return (
     <main className={styles.main}>
-      <div className={styles.top}>
-        <h1 className={styles.title}>sakko</h1>
-        {home && <div className={styles.description}><MDXContent code={home.body} /></div>}
-      </div>
-      <div className={styles.bottom}>
-        <Suspense><SearchBox /></Suspense>
-        <a href="/guide" className={styles.guide}>처음 오셨나요? →</a>
-        <a href="/contributors" className={styles.guide}>기여자 →</a>
-      </div>
+      <Header title={home.title} />
+      <article className={styles.article}>
+        <MDXContent code={home.body} />
+      </article>
+      <footer className={styles.footer}>
+        {FOOTER_LINKS.map((link) => (
+          <a key={link.slug} href={`/${link.slug}`} className={styles.footerLink}>
+            {link.label} →
+          </a>
+        ))}
+      </footer>
     </main>
   )
 }

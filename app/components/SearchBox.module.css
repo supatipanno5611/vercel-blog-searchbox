@@ -34,9 +34,47 @@
 
 /* ── 입력 래퍼 ── */
 .inputWrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.inputField {
   position: relative;
   display: flex;
   align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.backButton {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .backButton {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text);
+    padding: 0;
+    border-radius: 6px;
+  }
+
+  .backButton:hover {
+    background: var(--hover);
+  }
+
+  .backButton svg {
+    width: 20px;
+    height: 20px;
+  }
 }
 
 .icon {
@@ -195,7 +233,13 @@
 
 @media (max-width: 600px) {
   .results {
-    max-height: calc(100vh - 160px);
+    max-height: calc(100dvh - 160px);
+  }
+
+  .overlayDropdown .results {
+    max-height: none;
+    flex: 1;
+    overscroll-behavior: contain;
   }
 }
 
@@ -268,12 +312,20 @@
   text-align: center;
 }
 
+.guide {
+  padding: 16px 14px;
+  font-size: 0.88rem;
+  color: var(--muted);
+  text-align: center;
+}
+
 /* ── 오버레이 모드 (모든 화면 크기) ── */
 .overlayBackdrop {
   position: fixed;
   inset: 0;
   background: var(--overlay);
   z-index: 199;
+  animation: fadeIn 0.15s ease;
 }
 
 .overlayContainer {
@@ -285,6 +337,7 @@
   padding: 12px 16px;
   background: var(--bg);
   box-shadow: 0 2px 20px var(--shadow-sm);
+  animation: fadeIn 0.15s ease;
 }
 
 .overlayDropdown {
@@ -292,6 +345,57 @@
   margin-top: 8px;
   border-radius: 8px;
   animation: none;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlayBackdrop,
+  .overlayContainer,
+  .dropdown {
+    animation: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .overlayBackdrop {
+    display: none;
+  }
+
+  .overlayContainer {
+    inset: 0;
+    padding: 12px 16px;
+    padding-top: calc(12px + env(safe-area-inset-top));
+    box-shadow: none;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .overlayDropdown {
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .overlayDropdown .filterBtn {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+  }
+
+  .overlayDropdown .results li a {
+    padding: 12px 16px;
+  }
+
+  .overlayDropdown .hint {
+    display: none;
+  }
 }
 
 /* ── 키보드 힌트 ── */

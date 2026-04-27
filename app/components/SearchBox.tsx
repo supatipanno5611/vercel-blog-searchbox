@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import MiniSearch from 'minisearch'
 import { disassemble } from 'es-hangul'
@@ -40,6 +41,17 @@ const PLACEHOLDERS = [
 ]
 
 const MAX_RESULTS = 6
+
+const noopSubscribe = () => () => {}
+
+let cachedPlaceholder: string | null = null
+const getClientPlaceholder = () => {
+  if (cachedPlaceholder === null) {
+    cachedPlaceholder = PLACEHOLDERS[Math.floor(Math.random() * PLACEHOLDERS.length)]
+  }
+  return cachedPlaceholder
+}
+const getServerPlaceholder = () => PLACEHOLDERS[0]
 
 let miniSearch: MiniSearch | null = null
 let indexPromise: Promise<void> | null = null
@@ -100,18 +112,18 @@ function highlight(text: string, query: string): React.ReactNode {
 type Props = {
   overlayMode?: boolean
   onClose?: () => void
-  initialQuery?: string
 }
 
-export default function SearchBox({ overlayMode = false, onClose, initialQuery = '' }: Props) {
-  const [query, setQuery] = useState(initialQuery)
+export default function SearchBox({ overlayMode = false, onClose }: Props) {
+  const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [activeIndex, setActiveIndex] = useState(-1)
   const [filter, setFilter] = useState<Filter>('all')
-  const [placeholder, setPlaceholder] = useState(PLACEHOLDERS[0])
   const [focused, setFocused] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [mounted, setMounted] = useState(false)
+
+  const mounted = useSyncExternalStore(noopSubscribe, () => true, () => false)
+  const placeholder = useSyncExternalStore(noopSubscribe, getClientPlaceholder, getServerPlaceholder)
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const activeItemRef = useRef<HTMLLIElement | null>(null)
@@ -119,15 +131,13 @@ export default function SearchBox({ overlayMode = false, onClose, initialQuery =
   const inputRef = useRef<HTMLInputElement | null>(null)
   const queryRef = useRef(query)
   const filterRef = useRef(filter)
-  queryRef.current = query
-  filterRef.current = filter
-
-  const router = useRouter()
 
   useEffect(() => {
-    setMounted(true)
-    setPlaceholder(PLACEHOLDERS[Math.floor(Math.random() * PLACEHOLDERS.length)])
-  }, [])
+    queryRef.current = query
+    filterRef.current = filter
+  })
+
+  const router = useRouter()
 
   const doSearch = useCallback((q: string, f: Filter) => {
     if (!miniSearch || !q.trim()) return
@@ -135,17 +145,6 @@ export default function SearchBox({ overlayMode = false, onClose, initialQuery =
     const res = (miniSearch.search(q, fields ? { fields } : {}) as SearchResult[]).slice(0, MAX_RESULTS)
     setResults(res)
     setActiveIndex(res.length > 0 ? 0 : -1)
-  }, [])
-
-  // Initial load when URL has query
-  useEffect(() => {
-    if (!initialQuery) return
-    setLoading(true)
-    loadIndex().then(() => {
-      setLoading(false)
-      doSearch(initialQuery, 'all')
-    })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Scroll active item into view
@@ -167,7 +166,7 @@ export default function SearchBox({ overlayMode = false, onClose, initialQuery =
     return () => document.removeEventListener('mousedown', handler)
   }, [overlayMode, onClose])
 
-  // `/` shortcut to focus (only when not in overlay mode; overlay mode uses ReadingHeader's handler)
+  // `/` shortcut to focus (only when not in overlay mode; overlay mode uses Search's handler)
   useEffect(() => {
     if (overlayMode) return
     const handler = (e: KeyboardEvent) => {
@@ -184,6 +183,14 @@ export default function SearchBox({ overlayMode = false, onClose, initialQuery =
   // Auto-focus input when in overlay mode
   useEffect(() => {
     if (overlayMode) inputRef.current?.focus()
+  }, [overlayMode])
+
+  // Lock body scroll while overlay is open
+  useEffect(() => {
+    if (!overlayMode) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
   }, [overlayMode])
 
   const close = useCallback(() => {
@@ -211,10 +218,6 @@ export default function SearchBox({ overlayMode = false, onClose, initialQuery =
     const q = e.target.value
     setQuery(q)
     setActiveIndex(-1)
-    const params = new URLSearchParams(window.location.search)
-    if (q.trim()) params.set('q', q)
-    else params.delete('q')
-    router.replace(`?${params.toString()}`, { scroll: false })
     if (debounceRef.current) clearTimeout(debounceRef.current)
     if (!q.trim()) { setResults([]); return }
     debounceRef.current = setTimeout(() => {
@@ -254,7 +257,10 @@ export default function SearchBox({ overlayMode = false, onClose, initialQuery =
     } else if (e.key === 'Enter') {
       e.preventDefault()
       const idx = activeIndex >= 0 ? activeIndex : 0
-      if (results[idx]) router.push(results[idx].url)
+      if (results[idx]) {
+        router.push(results[idx].url)
+        close()
+      }
     } else if (e.key === 'Escape') {
       close()
     }
@@ -264,20 +270,17 @@ export default function SearchBox({ overlayMode = false, onClose, initialQuery =
     setQuery('')
     setResults([])
     setActiveIndex(-1)
-    const params = new URLSearchParams(window.location.search)
-    params.delete('q')
-    router.replace(`?${params.toString()}`, { scroll: false })
     inputRef.current?.focus()
   }
 
   const hasQuery = query.trim() !== ''
-  const showDropdown = (overlayMode || focused) && hasQuery
+  const showDropdown = overlayMode || (focused && hasQuery)
 
   return (
     <>
       {mounted && createPortal(
         <>
-          {overlayMode && <div className={styles.overlayBackdrop} onMouseDown={close} />}
+          {overlayMode && <div className={styles.overlayBackdrop} onClick={close} />}
           {!overlayMode && focused && <div className={styles.mobileOverlay} onMouseDown={close} />}
         </>,
         document.body
@@ -287,34 +290,43 @@ export default function SearchBox({ overlayMode = false, onClose, initialQuery =
         ref={containerRef}
       >
         <div className={styles.inputWrap}>
-          {loading ? (
-            <span className={styles.spinner} aria-hidden />
-          ) : (
-            <svg className={styles.icon} viewBox="0 0 20 20" fill="none" aria-hidden>
-              <circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.6" />
-              <line x1="12.5" y1="12.5" x2="17" y2="17" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            </svg>
-          )}
-          <input
-            ref={inputRef}
-            className={styles.input}
-            type="text"
-            placeholder={placeholder}
-            value={query}
-            onChange={handleChange}
-            onKeyDown={handleKeyDown}
-            onFocus={handleFocus}
-            autoComplete="off"
-            spellCheck={false}
-          />
-          {hasQuery && (
-            <button className={styles.clear} onClick={handleClear} aria-label="검색어 지우기">
+          {overlayMode && (
+            <button className={styles.backButton} onClick={close} aria-label="닫기">
               <svg viewBox="0 0 20 20" fill="none" aria-hidden>
-                <line x1="5" y1="5" x2="15" y2="15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                <line x1="15" y1="5" x2="5" y2="15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                <polyline points="12,4 6,10 12,16" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
           )}
+          <div className={styles.inputField}>
+            {loading ? (
+              <span className={styles.spinner} aria-hidden />
+            ) : (
+              <svg className={styles.icon} viewBox="0 0 20 20" fill="none" aria-hidden>
+                <circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.6" />
+                <line x1="12.5" y1="12.5" x2="17" y2="17" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+            )}
+            <input
+              ref={inputRef}
+              className={styles.input}
+              type="text"
+              placeholder={placeholder}
+              value={query}
+              onChange={handleChange}
+              onKeyDown={handleKeyDown}
+              onFocus={handleFocus}
+              autoComplete="off"
+              spellCheck={false}
+            />
+            {hasQuery && (
+              <button className={styles.clear} onClick={handleClear} aria-label="검색어 지우기">
+                <svg viewBox="0 0 20 20" fill="none" aria-hidden>
+                  <line x1="5" y1="5" x2="15" y2="15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                  <line x1="15" y1="5" x2="5" y2="15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
         {showDropdown && (
           <div className={`${styles.dropdown} ${overlayMode ? styles.overlayDropdown : ''}`} onMouseDown={(e) => e.preventDefault()}>
@@ -330,8 +342,10 @@ export default function SearchBox({ overlayMode = false, onClose, initialQuery =
               ))}
             </div>
             <ul className={styles.results}>
-              {results.length === 0 ? (
-                <li className={styles.empty}>'{query}'에 대한 결과가 없어요</li>
+              {!hasQuery ? (
+                <li className={styles.guide}>제목·내용·주제어로 검색할 수 있어요</li>
+              ) : results.length === 0 ? (
+                <li className={styles.empty}>&quot;{query}&quot;에 대한 결과가 없어요</li>
               ) : (
                 results.map((r, i) => {
                   const matchedFields = new Set(Object.values(r.match).flat())
@@ -345,7 +359,7 @@ export default function SearchBox({ overlayMode = false, onClose, initialQuery =
                       className={isActive ? styles.active : undefined}
                       onMouseEnter={() => setActiveIndex(i)}
                     >
-                      <a href={r.url}>
+                      <Link href={r.url} onClick={close}>
                         <span className={styles.title}>{highlight(r.title, query)}</span>
                         {showTags && (
                           <span className={styles.tags}>
@@ -362,7 +376,7 @@ export default function SearchBox({ overlayMode = false, onClose, initialQuery =
                         {snippet && (
                           <span className={styles.snippet}>{highlight(snippet, query)}</span>
                         )}
-                      </a>
+                      </Link>
                     </li>
                   )
                 })
