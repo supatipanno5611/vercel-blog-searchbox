@@ -7,7 +7,8 @@
     "build": "next build",
     "prebuild": "velite",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "sync": "node scripts/sync.mjs"
   },
   "dependencies": {
     "es-hangul": "^2.3.8",
