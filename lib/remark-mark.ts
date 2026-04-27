@@ -1,5 +1,6 @@
 import { visit } from 'unist-util-visit'
 import type { Root, Text } from 'mdast'
+import type { MdxJsxTextElement } from 'mdast-util-mdx-jsx'
 
 export function remarkMark() {
   return (tree: Root) => {
@@ -10,7 +11,7 @@ export function remarkMark() {
       const parts = node.value.split(/(==.+?==)/g)
       if (parts.length === 1) return
 
-      const newNodes: any[] = parts
+      const newNodes: (MdxJsxTextElement | Text)[] = parts
         .filter((p) => p !== '')
         .map((part) => {
           if (part.startsWith('==') && part.endsWith('==')) {
@@ -24,7 +25,7 @@ export function remarkMark() {
           return { type: 'text', value: part }
         })
 
-      ;(parent as any).children.splice(index, 1, ...newNodes)
+      parent.children.splice(index, 1, ...newNodes)
       return index + newNodes.length
     })
   }

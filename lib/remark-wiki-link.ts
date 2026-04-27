@@ -1,5 +1,6 @@
 import { visit } from 'unist-util-visit'
 import type { Root, Text } from 'mdast'
+import type { MdxJsxTextElement } from 'mdast-util-mdx-jsx'
 
 export function remarkWikiLink() {
   return (tree: Root) => {
@@ -10,7 +11,7 @@ export function remarkWikiLink() {
       const parts = node.value.split(/(\[\[.+?\]\])/g)
       if (parts.length === 1) return
 
-      const newNodes: any[] = parts
+      const newNodes: (MdxJsxTextElement | Text)[] = parts
         .filter((p) => p !== '')
         .map((part) => {
           const match = part.match(/^\[\[(.+?)\]\]$/)
@@ -31,7 +32,7 @@ export function remarkWikiLink() {
           }
         })
 
-      ;(parent as any).children.splice(index, 1, ...newNodes)
+      parent.children.splice(index, 1, ...newNodes)
       return index + newNodes.length
     })
   }

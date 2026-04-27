@@ -1,5 +1,6 @@
 import { visit, SKIP } from 'unist-util-visit'
 import type { Root, Blockquote } from 'mdast'
+import type { MdxJsxFlowElement } from 'mdast-util-mdx-jsx'
 
 const CALLOUT_TYPES = new Set([
   'note', 'tip', 'info', 'warning', 'danger', 'error', 'bug',
@@ -37,7 +38,7 @@ export function remarkCallout() {
         }
       }
 
-      const calloutNode: any = {
+      const calloutNode: MdxJsxFlowElement = {
         type: 'mdxJsxFlowElement',
         name: 'div',
         attributes: [
@@ -49,7 +50,7 @@ export function remarkCallout() {
             type: 'mdxJsxFlowElement',
             name: 'div',
             attributes: [{ type: 'mdxJsxAttribute', name: 'className', value: 'callout-title' }],
-            children: [{ type: 'text', value: title }],
+            children: [{ type: 'text', value: title }] as unknown as MdxJsxFlowElement['children'],
           },
           {
             type: 'mdxJsxFlowElement',
@@ -60,7 +61,7 @@ export function remarkCallout() {
         ],
       }
 
-      ;(parent as any).children[index] = calloutNode
+      parent.children[index] = calloutNode
       return SKIP
     })
   }

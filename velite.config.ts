@@ -1,6 +1,7 @@
 import { defineConfig, defineCollection, s } from 'velite'
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
+import { VFile } from 'vfile'
 import { remarkPlainText } from './lib/remark-plain-text'
 import { remarkMark } from './lib/remark-mark'
 import { remarkCallout } from './lib/remark-callout'
@@ -18,29 +19,16 @@ const posts = defineCollection({
   }).transform(async ({ raw, ...data }) => {
     const processor = unified().use(remarkParse).use(remarkPlainText)
     const tree = processor.parse(raw ?? '')
-    const file = { data: {} as Record<string, unknown> }
-    await processor.run(tree, file as any)
+    const file = new VFile({ value: raw ?? '' })
+    await processor.run(tree, file)
     const filename = data.slug.split('/').pop() ?? data.slug
     return {
       ...data,
       title: filename,
       slugAsParams: data.slug.replace(/^posts\//, '').replace(/\s+/g, '-'),
-      plainText: (file.data.plainText as string) ?? '',
+      plainText: file.data.plainText ?? '',
     }
   }),
-})
-
-const pages = defineCollection({
-  name: 'Page',
-  pattern: 'pages/*.mdx',
-  schema: s.object({
-    slug: s.path(),
-    title: s.string().optional(),
-    body: s.mdx(),
-  }).transform((data) => ({
-    ...data,
-    name: data.slug.replace(/^pages\//, ''),
-  })),
 })
 
 export default defineConfig({
@@ -49,7 +37,7 @@ export default defineConfig({
     data: '.velite',
     assets: 'public/static',
   },
-  collections: { posts, pages },
+  collections: { posts },
   mdx: {
     remarkPlugins: [remarkMark, remarkCallout, remarkWikiLink],
   },
