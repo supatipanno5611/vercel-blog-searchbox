@@ -26,6 +26,8 @@ type Props = {
   recentTopics: string[]
 }
 
+const TOPIC_PAGE_SIZE = 30
+
 export default function TopicsClient({ topic, posts, allTopics, recentTopics }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -41,6 +43,7 @@ export default function TopicsClient({ topic, posts, allTopics, recentTopics }: 
 
   const [pickerOpen, setPickerOpen] = useState(false)
   const [visibleState, setVisibleState] = useState({ key: selectedKey, count: 30 })
+  const [visibleTopicCount, setVisibleTopicCount] = useState(TOPIC_PAGE_SIZE)
   const visibleCount = visibleState.key === selectedKey ? visibleState.count : 30
   const pickerVisible = useHideOnScroll()
 
@@ -84,6 +87,9 @@ export default function TopicsClient({ topic, posts, allTopics, recentTopics }: 
     .map((p) => ({ p, overlap: overlapCount(p.base, selected), sim: jaccard(p.base, selected) }))
     .sort((a, b) => b.overlap - a.overlap || b.sim - a.sim)
     .map((x) => x.p)
+  const suggestedTopics = recentTopics.length > 0 ? recentTopics : allTopics.map((topicInfo) => topicInfo.name)
+  const visibleSuggestedTopics = suggestedTopics.slice(0, visibleTopicCount)
+  const hasMoreSuggestedTopics = suggestedTopics.length > visibleTopicCount
 
   return (
     <main className={styles.main}>
@@ -124,11 +130,11 @@ export default function TopicsClient({ topic, posts, allTopics, recentTopics }: 
         </div>
       )}
 
-      {selected.length === 0 && recentTopics.length > 0 && (
+      {selected.length === 0 && suggestedTopics.length > 0 && (
         <div className={styles.emptyState}>
-          <p className={styles.emptyHint}>Recent topics</p>
+          <p className={styles.emptyHint}>{recentTopics.length > 0 ? 'Recent topics' : 'Browse topics'}</p>
           <div className={styles.recommendList}>
-            {recentTopics.map((name) => {
+            {visibleSuggestedTopics.map((name) => {
               const info = allTopics.find((topicInfo) => topicInfo.name === name)
               return (
                 <button key={name} className={styles.recommendChip} onClick={() => addTopic(name)}>
@@ -138,10 +144,15 @@ export default function TopicsClient({ topic, posts, allTopics, recentTopics }: 
               )
             })}
           </div>
+          {hasMoreSuggestedTopics && (
+            <button className={styles.moreBtn} onClick={() => setVisibleTopicCount(visibleTopicCount + TOPIC_PAGE_SIZE)}>
+              Show more
+            </button>
+          )}
         </div>
       )}
 
-      {selected.length === 0 && recentTopics.length === 0 && <p className={styles.emptyHint}>Select a topic to browse posts.</p>}
+      {selected.length === 0 && suggestedTopics.length === 0 && <p className={styles.emptyHint}>Select a topic to browse posts.</p>}
 
       {selected.length > 0 && sorted.length === 0 && (
         <p className={styles.empty}>
