@@ -23,12 +23,12 @@ type Props = {
   topic: string | null
   posts: PostSummary[]
   allTopics: TopicInfo[]
-  recentTopics: string[]
+  curatedTopics: string[]
 }
 
 const TOPIC_PAGE_SIZE = 30
 
-export default function TopicsClient({ topic, posts, allTopics, recentTopics }: Props) {
+export default function TopicsClient({ topic, posts, allTopics, curatedTopics }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -87,7 +87,7 @@ export default function TopicsClient({ topic, posts, allTopics, recentTopics }: 
     .map((p) => ({ p, overlap: overlapCount(p.base, selected), sim: jaccard(p.base, selected) }))
     .sort((a, b) => b.overlap - a.overlap || b.sim - a.sim)
     .map((x) => x.p)
-  const suggestedTopics = recentTopics.length > 0 ? recentTopics : allTopics.map((topicInfo) => topicInfo.name)
+  const suggestedTopics = curatedTopics.length > 0 ? curatedTopics : allTopics.map((topicInfo) => topicInfo.name)
   const visibleSuggestedTopics = suggestedTopics.slice(0, visibleTopicCount)
   const hasMoreSuggestedTopics = suggestedTopics.length > visibleTopicCount
 
@@ -132,7 +132,7 @@ export default function TopicsClient({ topic, posts, allTopics, recentTopics }: 
 
       {selected.length === 0 && suggestedTopics.length > 0 && (
         <div className={styles.emptyState}>
-          <p className={styles.emptyHint}>{recentTopics.length > 0 ? 'Recent topics' : 'Browse topics'}</p>
+          <p className={styles.emptyHint}>{curatedTopics.length > 0 ? 'Recommended topics' : 'Browse topics'}</p>
           <div className={styles.recommendList}>
             {visibleSuggestedTopics.map((name) => {
               const info = allTopics.find((topicInfo) => topicInfo.name === name)

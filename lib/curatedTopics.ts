@@ -1,11 +1,11 @@
 import { posts } from '#site/content'
 import { siteConfig } from '@/site.config'
 
-export function getRecentTopics(): string[] {
+export function getCuratedTopics(): string[] {
   const seen = new Set<string>()
   const result: string[] = []
 
-  for (const title of siteConfig.recentPostTitles) {
+  for (const title of siteConfig.curatedTopicSourceTitles) {
     const post = posts.find((p) => p.title === title)
     if (!post) continue
 

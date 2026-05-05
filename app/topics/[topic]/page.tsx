@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import { Suspense } from 'react'
 import { safeDecodeURIComponent } from '@/lib/safe-decode'
 import { getAllTopics, getPostsByTopic } from '@/lib/topics'
-import { getRecentTopics } from '@/lib/recentTopics'
+import { getCuratedTopics } from '@/lib/curatedTopics'
 import TopicsClient from './TopicsClient'
 
 type Props = {
@@ -28,7 +28,7 @@ export default async function TopicPage({ params }: Props) {
 
   return (
     <Suspense>
-      <TopicsClient topic={decodedTopic} posts={topicPosts} allTopics={allTopics} recentTopics={getRecentTopics()} />
+      <TopicsClient topic={decodedTopic} posts={topicPosts} allTopics={allTopics} curatedTopics={getCuratedTopics()} />
     </Suspense>
   )
 }

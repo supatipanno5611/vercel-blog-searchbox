@@ -1,13 +1,14 @@
 import { readdir, readFile, writeFile, unlink, stat, mkdir } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { argv, cwd, env, stdin, stdout } from 'node:process'
+import { argv, cwd, stdin, stdout } from 'node:process'
 import readline from 'node:readline/promises'
+import { siteConfig } from '../site.config.ts'
 
 const ROOT = cwd()
-const VAULT_PUBLISH = resolve(env.VAULT_PUBLISH ?? join(ROOT, '_publish'))
-const VERCEL_CONTENT = resolve(env.VERCEL_CONTENT ?? join(ROOT, 'content'))
-const MANIFEST_PATH = resolve(env.SYNC_MANIFEST ?? join(ROOT, '.sync-state.json'))
+const VAULT_PUBLISH = resolve(getRequiredConfig('VAULT_PUBLISH'))
+const VERCEL_CONTENT = resolve(process.env.VERCEL_CONTENT ?? join(ROOT, 'content'))
+const MANIFEST_PATH = resolve(process.env.SYNC_MANIFEST ?? join(ROOT, '.sync-state.json'))
 
 const AUTO_YES = argv.includes('--yes')
 const MTIME_TOLERANCE_MS = 1000
@@ -19,6 +20,12 @@ const LABEL = {
   'delete-vercel': '_publish에서 사라진 글을 content에서도 삭제',
   'warn-vercel-newer': 'content가 더 최신이라 건너뜀',
   'warn-orphan': 'content에만 있어서 건너뜀',
+}
+
+function getRequiredConfig(name) {
+  const value = siteConfig[name]
+  if (!value) throw new Error(`${name} must be set before running sync.`)
+  return value
 }
 
 async function main() {
