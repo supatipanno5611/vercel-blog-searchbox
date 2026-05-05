@@ -29,5 +29,5 @@
 }
 
 .footerLink:hover {
-  color: var(--link);
+  color: var(--color-accent);
 }

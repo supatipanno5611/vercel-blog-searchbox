@@ -2,15 +2,11 @@ import { notFound } from 'next/navigation'
 import { posts } from '#site/content'
 import { MDXContent } from '@/app/components/MDXContent'
 import Header from '@/app/components/Header'
+import { siteConfig } from '@/site.config'
 import styles from './page.module.css'
 
-const FOOTER_LINKS = [
-  { slug: '사용-안내', label: '사용 안내' },
-  { slug: '웹사이트에-기여한-사람들', label: '웹사이트에 기여한 사람들' },
-]
-
 export default function HomePage() {
-  const home = posts.find((p) => p.slugAsParams === 'home')
+  const home = posts.find((p) => p.slugAsParams === siteConfig.homeSlug)
   if (!home) notFound()
 
   return (
@@ -20,7 +16,7 @@ export default function HomePage() {
         <MDXContent code={home.body} />
       </article>
       <footer className={styles.footer}>
-        {FOOTER_LINKS.map((link) => (
+        {siteConfig.footerLinks.map((link) => (
           <a key={link.slug} href={`/${link.slug}`} className={styles.footerLink}>
             {link.label} →
           </a>

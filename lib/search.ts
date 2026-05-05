@@ -1,5 +1,6 @@
 import { posts } from '#site/content'
 import { getChoseong } from 'es-hangul'
+import { siteConfig } from '@/site.config'
 
 export type SearchDoc = {
   id: string
@@ -11,11 +12,9 @@ export type SearchDoc = {
   choseong: string
 }
 
-const EXCLUDED_SLUGS = new Set(['home', '사용-안내', '웹사이트에-기여한-사람들'])
-
 export function getSearchDocs(): SearchDoc[] {
   return posts
-    .filter((p) => !p.draft && !EXCLUDED_SLUGS.has(p.slugAsParams))
+    .filter((p) => !p.draft && !siteConfig.excludedSlugs.includes(p.slugAsParams))
     .map((p) => {
       const baseStr = p.base.join(' ')
       const text = `${p.title} ${p.plainText} ${baseStr}`

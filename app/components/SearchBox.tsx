@@ -2,27 +2,27 @@
 
 import { useState, useEffect, useRef, useCallback, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import MiniSearch from 'minisearch'
-import { disassemble } from 'es-hangul'
-import type { SearchDoc } from '@/lib/search'
+import { useClickOutside } from './hooks/useClickOutside'
+import { useCtrlSlash } from './hooks/useCtrlSlash'
+import {
+  loadIndex,
+  isIndexReady,
+  searchDocs,
+  searchTopics,
+  type SearchResult,
+  type TopicResult,
+} from '@/lib/searchIndex'
+import SearchResults from './SearchResults'
 import styles from './SearchBox.module.css'
-
-type SearchResult = SearchDoc & {
-  score: number
-  terms: string[]
-  queryTerms: string[]
-  match: Record<string, string[]>
-}
 
 type Filter = 'all' | 'title' | 'body' | 'base'
 
 const FILTER_OPTIONS: { key: Filter; label: string }[] = [
-  { key: 'all', label: '전체' },
-  { key: 'title', label: '제목만' },
-  { key: 'body', label: '본문만' },
-  { key: 'base', label: '주제어만' },
+  { key: 'all', label: 'All' },
+  { key: 'title', label: 'Title' },
+  { key: 'body', label: 'Body' },
+  { key: 'base', label: 'Topic' },
 ]
 
 const FILTER_FIELDS: Record<Filter, string[] | undefined> = {
@@ -32,15 +32,7 @@ const FILTER_FIELDS: Record<Filter, string[] | undefined> = {
   base: ['base'],
 }
 
-const PLACEHOLDERS = [
-  '검색어를 입력하세요',
-  '어떤 글을 찾고 계신가요?',
-  '제목이나 내용으로 검색',
-  '궁금한 것을 검색해보세요',
-  '글 제목, 내용 검색 가능',
-]
-
-const MAX_RESULTS = 6
+const PLACEHOLDERS = ['Search posts', 'Find a topic', 'Search title or body', 'What are you looking for?']
 
 const noopSubscribe = () => () => {}
 
@@ -53,70 +45,16 @@ const getClientPlaceholder = () => {
 }
 const getServerPlaceholder = () => PLACEHOLDERS[0]
 
-let miniSearch: MiniSearch | null = null
-let indexPromise: Promise<void> | null = null
-
-function buildIndex(docs: SearchDoc[]): MiniSearch {
-  const ms = new MiniSearch({
-    fields: ['title', 'body', 'base', 'choseong'],
-    storeFields: ['title', 'url', 'body', 'base', 'tags'],
-    processTerm: (term) => disassemble(term),
-    searchOptions: { boost: { title: 3, base: 2 }, fuzzy: 0.2, prefix: true },
-  })
-  ms.addAll(docs)
-  return ms
-}
-
-function loadIndex(): Promise<void> {
-  if (miniSearch) return Promise.resolve()
-  if (!indexPromise) {
-    indexPromise = fetch('/search-index.json')
-      .then((r) => r.json())
-      .then((docs: SearchDoc[]) => {
-        miniSearch = buildIndex(docs)
-      })
-  }
-  return indexPromise
-}
-
-function getSnippet(body: string, query: string, length = 80): string {
-  const terms = query.trim().split(/\s+/).filter(Boolean)
-  const lower = body.toLowerCase()
-  let pos = -1
-  for (const term of terms) {
-    const idx = lower.indexOf(term.toLowerCase())
-    if (idx !== -1) { pos = idx; break }
-  }
-  if (pos === -1) return body.slice(0, length) + (body.length > length ? '…' : '')
-  const start = Math.max(0, pos - 25)
-  const end = Math.min(body.length, start + length)
-  return (start > 0 ? '…' : '') + body.slice(start, end) + (end < body.length ? '…' : '')
-}
-
-function isTagMatched(tag: string, query: string): boolean {
-  const terms = query.trim().split(/\s+/).filter(Boolean)
-  const dTag = disassemble(tag.toLowerCase())
-  return terms.some((t) => dTag.includes(disassemble(t.toLowerCase())))
-}
-
-function highlight(text: string, query: string): React.ReactNode {
-  const terms = query.trim().split(/\s+/).filter(Boolean)
-  if (!terms.length) return text
-  const escaped = terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-  const parts = text.split(new RegExp(`(${escaped.join('|')})`, 'gi'))
-  return parts.map((part, i) =>
-    i % 2 === 1 ? <mark key={i} className={styles.mark}>{part}</mark> : part
-  )
-}
-
 type Props = {
   overlayMode?: boolean
   onClose?: () => void
+  initialQuery?: string
 }
 
-export default function SearchBox({ overlayMode = false, onClose }: Props) {
-  const [query, setQuery] = useState('')
+export default function SearchBox({ overlayMode = false, onClose, initialQuery }: Props) {
+  const [query, setQuery] = useState(initialQuery ?? '')
   const [results, setResults] = useState<SearchResult[]>([])
+  const [topicResults, setTopicResults] = useState<TopicResult[]>([])
   const [activeIndex, setActiveIndex] = useState(-1)
   const [filter, setFilter] = useState<Filter>('all')
   const [focused, setFocused] = useState(false)
@@ -131,82 +69,78 @@ export default function SearchBox({ overlayMode = false, onClose }: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const queryRef = useRef(query)
   const filterRef = useRef(filter)
+  const router = useRouter()
 
   useEffect(() => {
     queryRef.current = query
     filterRef.current = filter
   })
 
-  const router = useRouter()
+  const resetResults = useCallback(() => {
+    setResults([])
+    setTopicResults([])
+    setActiveIndex(-1)
+  }, [])
 
   const doSearch = useCallback((q: string, f: Filter) => {
-    if (!miniSearch || !q.trim()) return
-    const fields = FILTER_FIELDS[f]
-    const res = (miniSearch.search(q, fields ? { fields } : {}) as SearchResult[]).slice(0, MAX_RESULTS)
+    if (!isIndexReady() || !q.trim()) return
+
+    if (f === 'base') {
+      setResults([])
+      const res = searchTopics(q)
+      setTopicResults(res)
+      setActiveIndex(res.length > 0 ? 0 : -1)
+      return
+    }
+
+    setTopicResults([])
+    const res = searchDocs(q, FILTER_FIELDS[f])
     setResults(res)
     setActiveIndex(res.length > 0 ? 0 : -1)
   }, [])
 
-  // Scroll active item into view
   useEffect(() => {
     activeItemRef.current?.scrollIntoView({ block: 'nearest' })
   }, [activeIndex])
 
-  // Close on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setResults([])
-        setActiveIndex(-1)
-        setFocused(false)
-        if (overlayMode) onClose?.()
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [overlayMode, onClose])
+  useClickOutside(
+    containerRef,
+    useCallback(() => {
+      resetResults()
+      setFocused(false)
+      if (overlayMode) onClose?.()
+    }, [resetResults, overlayMode, onClose])
+  )
 
-  // `/` shortcut to focus (only when not in overlay mode; overlay mode uses Search's handler)
-  useEffect(() => {
-    if (overlayMode) return
-    const handler = (e: KeyboardEvent) => {
-      if (e.key !== '/' || !e.ctrlKey) return
-      const tag = (document.activeElement as HTMLElement)?.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return
-      e.preventDefault()
-      inputRef.current?.focus()
-    }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [overlayMode])
+  useCtrlSlash(useCallback(() => inputRef.current?.focus(), []), !overlayMode)
 
-  // Auto-focus input when in overlay mode
   useEffect(() => {
     if (overlayMode) inputRef.current?.focus()
   }, [overlayMode])
 
-  // Lock body scroll while overlay is open
   useEffect(() => {
     if (!overlayMode) return
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = prev }
+    return () => {
+      document.body.style.overflow = prev
+    }
   }, [overlayMode])
 
   const close = useCallback(() => {
-    setResults([])
-    setActiveIndex(-1)
+    resetResults()
     setFocused(false)
     inputRef.current?.blur()
     onClose?.()
-  }, [onClose])
+  }, [onClose, resetResults])
 
   const handleFocus = () => {
     setFocused(true)
-    if (miniSearch) {
+    if (isIndexReady()) {
       if (queryRef.current.trim()) doSearch(queryRef.current, filterRef.current)
       return
     }
+
     setLoading(true)
     loadIndex().then(() => {
       setLoading(false)
@@ -218,46 +152,62 @@ export default function SearchBox({ overlayMode = false, onClose }: Props) {
     const q = e.target.value
     setQuery(q)
     setActiveIndex(-1)
+
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    if (!q.trim()) { setResults([]); return }
+    if (!q.trim()) {
+      resetResults()
+      return
+    }
+
     debounceRef.current = setTimeout(() => {
-      if (!miniSearch) return
-      doSearch(q, filterRef.current)
+      if (isIndexReady()) doSearch(q, filterRef.current)
     }, 250)
   }
 
   const handleFilterChange = (f: Filter) => {
     setFilter(f)
+    if (f === 'base') setResults([])
+    else setTopicResults([])
     if (queryRef.current.trim()) doSearch(queryRef.current, f)
+  }
+
+  const activeListLength = filter === 'base' ? topicResults.length + 1 : results.length
+
+  const rotateFilter = (dir: 1 | -1) => {
+    setFilter((f) => {
+      const idx = FILTER_OPTIONS.findIndex((option) => option.key === f)
+      const next = FILTER_OPTIONS[(idx + dir + FILTER_OPTIONS.length) % FILTER_OPTIONS.length]
+      if (queryRef.current.trim()) doSearch(queryRef.current, next.key)
+      return next.key
+    })
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault()
-      setActiveIndex((i) => Math.min(i + 1, results.length - 1))
+      setActiveIndex((i) => Math.min(i + 1, activeListLength - 1))
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
       setActiveIndex((i) => Math.max(i - 1, 0))
     } else if (e.key === 'ArrowLeft') {
       e.preventDefault()
-      setFilter((f) => {
-        const idx = FILTER_OPTIONS.findIndex((o) => o.key === f)
-        const next = FILTER_OPTIONS[(idx - 1 + FILTER_OPTIONS.length) % FILTER_OPTIONS.length]
-        if (queryRef.current.trim()) doSearch(queryRef.current, next.key)
-        return next.key
-      })
+      rotateFilter(-1)
     } else if (e.key === 'ArrowRight') {
       e.preventDefault()
-      setFilter((f) => {
-        const idx = FILTER_OPTIONS.findIndex((o) => o.key === f)
-        const next = FILTER_OPTIONS[(idx + 1) % FILTER_OPTIONS.length]
-        if (queryRef.current.trim()) doSearch(queryRef.current, next.key)
-        return next.key
-      })
+      rotateFilter(1)
     } else if (e.key === 'Enter') {
       e.preventDefault()
       const idx = activeIndex >= 0 ? activeIndex : 0
-      if (results[idx]) {
+
+      if (filter === 'base') {
+        if (topicResults[idx]) {
+          router.push(topicResults[idx].url)
+          close()
+        } else {
+          router.push('/topics/search')
+          close()
+        }
+      } else if (results[idx]) {
         router.push(results[idx].url)
         close()
       }
@@ -268,8 +218,7 @@ export default function SearchBox({ overlayMode = false, onClose }: Props) {
 
   const handleClear = () => {
     setQuery('')
-    setResults([])
-    setActiveIndex(-1)
+    resetResults()
     inputRef.current?.focus()
   }
 
@@ -278,22 +227,29 @@ export default function SearchBox({ overlayMode = false, onClose }: Props) {
 
   return (
     <>
-      {mounted && createPortal(
-        <>
-          {overlayMode && <div className={styles.overlayBackdrop} onClick={close} />}
-          {!overlayMode && focused && <div className={styles.mobileOverlay} onMouseDown={close} />}
-        </>,
-        document.body
-      )}
+      {mounted &&
+        createPortal(
+          <>
+            {overlayMode && <div className={styles.overlayBackdrop} onClick={close} />}
+            {!overlayMode && focused && <div className={styles.mobileOverlay} onMouseDown={close} />}
+          </>,
+          document.body
+        )}
       <div
         className={`${styles.container} ${overlayMode ? styles.overlayContainer : focused ? styles.containerFocused : ''}`}
         ref={containerRef}
       >
         <div className={styles.inputWrap}>
           {overlayMode && (
-            <button className={styles.backButton} onClick={close} aria-label="닫기">
+            <button className={styles.backButton} onClick={close} aria-label="Close search">
               <svg viewBox="0 0 20 20" fill="none" aria-hidden>
-                <polyline points="12,4 6,10 12,16" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                <polyline
+                  points="12,4 6,10 12,16"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </svg>
             </button>
           )}
@@ -303,7 +259,15 @@ export default function SearchBox({ overlayMode = false, onClose }: Props) {
             ) : (
               <svg className={styles.icon} viewBox="0 0 20 20" fill="none" aria-hidden>
                 <circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.6" />
-                <line x1="12.5" y1="12.5" x2="17" y2="17" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                <line
+                  x1="12.5"
+                  y1="12.5"
+                  x2="17"
+                  y2="17"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                />
               </svg>
             )}
             <input
@@ -319,7 +283,7 @@ export default function SearchBox({ overlayMode = false, onClose }: Props) {
               spellCheck={false}
             />
             {hasQuery && (
-              <button className={styles.clear} onClick={handleClear} aria-label="검색어 지우기">
+              <button className={styles.clear} onClick={handleClear} aria-label="Clear search">
                 <svg viewBox="0 0 20 20" fill="none" aria-hidden>
                   <line x1="5" y1="5" x2="15" y2="15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
                   <line x1="15" y1="5" x2="5" y2="15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -329,65 +293,37 @@ export default function SearchBox({ overlayMode = false, onClose }: Props) {
           </div>
         </div>
         {showDropdown && (
-          <div className={`${styles.dropdown} ${overlayMode ? styles.overlayDropdown : ''}`} onMouseDown={(e) => e.preventDefault()}>
+          <div
+            className={`${styles.dropdown} ${overlayMode ? styles.overlayDropdown : ''}`}
+            onMouseDown={(e) => e.preventDefault()}
+          >
             <div className={styles.filters}>
-              {FILTER_OPTIONS.map((opt) => (
+              {FILTER_OPTIONS.map((option) => (
                 <button
-                  key={opt.key}
-                  className={`${styles.filterBtn} ${filter === opt.key ? styles.filterActive : ''}`}
-                  onClick={() => handleFilterChange(opt.key)}
+                  key={option.key}
+                  className={`${styles.filterBtn} ${filter === option.key ? styles.filterActive : ''}`}
+                  onClick={() => handleFilterChange(option.key)}
                 >
-                  {opt.label}
+                  {option.label}
                 </button>
               ))}
             </div>
-            <ul className={styles.results}>
-              {!hasQuery ? (
-                <li className={styles.guide}>제목·내용·주제어로 검색할 수 있어요</li>
-              ) : results.length === 0 ? (
-                <li className={styles.empty}>&quot;{query}&quot;에 대한 결과가 없어요</li>
-              ) : (
-                results.map((r, i) => {
-                  const matchedFields = new Set(Object.values(r.match).flat())
-                  const snippet = matchedFields.has('body') ? getSnippet(r.body, query) : null
-                  const showTags = r.tags.length > 0 && (filter === 'base' || (filter === 'all' && matchedFields.has('base')))
-                  const isActive = i === activeIndex
-                  return (
-                    <li
-                      key={r.id}
-                      ref={isActive ? activeItemRef : null}
-                      className={isActive ? styles.active : undefined}
-                      onMouseEnter={() => setActiveIndex(i)}
-                    >
-                      <Link href={r.url} onClick={close}>
-                        <span className={styles.title}>{highlight(r.title, query)}</span>
-                        {showTags && (
-                          <span className={styles.tags}>
-                            {r.tags.map((tag) => (
-                              <span
-                                key={tag}
-                                className={isTagMatched(tag, query) ? styles.tagMatched : styles.tagOther}
-                              >
-                                {tag}
-                              </span>
-                            ))}
-                          </span>
-                        )}
-                        {snippet && (
-                          <span className={styles.snippet}>{highlight(snippet, query)}</span>
-                        )}
-                      </Link>
-                    </li>
-                  )
-                })
-              )}
-            </ul>
+            <SearchResults
+              filter={filter}
+              query={query}
+              hasQuery={hasQuery}
+              results={results}
+              topicResults={topicResults}
+              activeIndex={activeIndex}
+              onActiveChange={setActiveIndex}
+              onClose={close}
+              activeItemRef={activeItemRef}
+            />
             <div className={styles.hint}>
-              <span>↑↓ 이동</span>
-              <span>←→ 필터</span>
-              <span>Enter 선택</span>
-              <span>Ctrl+/ 검색</span>
-              <span>Esc 닫기</span>
+              <span>Arrows move</span>
+              <span>Left/right filter</span>
+              <span>Enter open</span>
+              <span>Esc close</span>
             </div>
           </div>
         )}

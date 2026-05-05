@@ -1,113 +1,118 @@
 # my-blog
 
-Next.js 기반의 한국어 블로그/위키 템플릿입니다. MDX 콘텐츠, 한국어 전문 검색, Obsidian 스타일 문법을 지원합니다.
+Next.js 기반 MDX 블로그 템플릿입니다. 한국어 검색, 토픽 탐색, Obsidian 스타일 MDX 문법, 오디오/영상 노트 기능을 지원합니다.
 
-## 기술 스택
+## Stack
 
-- **Next.js 16** (App Router, 정적 사이트 생성)
-- **React 19** + **TypeScript**
-- **Velite** — MDX 콘텐츠 관리
-- **MiniSearch** + **es-hangul** — 한국어 초성 분해 전문 검색
-- **Spoqa Han Sans Neo** 폰트
+- Next.js 16 App Router
+- React 19 + TypeScript
+- Velite for MDX content
+- MiniSearch + es-hangul for Korean search
+- lite-youtube-embed for YouTube notes
 
-## 시작하기
+## Getting Started
 
 ```bash
 npm install
 npm run dev
 ```
 
-빌드 시 Velite가 자동으로 먼저 실행됩니다 (`prebuild` 훅).
+Build:
 
 ```bash
 npm run build
 npm start
 ```
 
-## 콘텐츠 구조
+## Content
 
-```
+MDX files live directly under `content/`.
+
+```txt
 content/
-├── posts/          # 블로그 글 (MDX)
-│   └── **/*.mdx
-└── pages/          # 특수 페이지 (MDX)
-    ├── home.mdx    # 메인 페이지 소개문
-    ├── guide.mdx   # 가이드 페이지
-    └── contributor.mdx  # 기여자 페이지
+├── home.mdx
+├── 사용 안내.mdx
+├── 내 글.mdx
+└── notes/
+    └── 하위 폴더 글.mdx
 ```
 
-### 글 작성
+The file path becomes the URL path. Spaces are converted to hyphens.
 
-`content/posts/` 하위에 MDX 파일을 생성합니다. **파일명이 곧 글 제목**입니다.
+- `content/내 글.mdx` -> `/내-글`
+- `content/notes/하위 폴더 글.mdx` -> `/notes/하위-폴더-글`
+
+The file name is used as the post title.
 
 ```mdx
 ---
-draft: false          # true이면 빌드에서 제외
-base: [주제어, 태그]  # 관련 글 연결 및 검색에 사용
+draft: false
+base: [Next.js, MDX]
 ---
 
-본문 내용...
+본문...
 ```
 
-폴더 구조가 URL 경로가 됩니다. 예: `content/posts/개발/Next.js.mdx` → `/개발/Next.js`
+## MDX Features
 
-## MDX 확장 문법
+Wiki links:
 
-### 위키링크
-
-```
-[[페이지명]]
-[[페이지명|표시텍스트]]
+```mdx
+[[사용 안내]]
+[[사용 안내|가이드]]
 ```
 
-### 강조 (하이라이트)
+Highlight:
 
-```
-==강조할 텍스트==
-```
-
-### 콜아웃 블록 (Obsidian 스타일)
-
-```
-> [!note] 제목
-> 내용
-
-> [!tip]
-> 제목 없이도 사용 가능
+```mdx
+==highlighted text==
 ```
 
-지원 타입: `note`, `tip`, `info`, `warning`, `danger`, `error`, `bug`, `success`, `question`, `failure`, `example`, `quote`, `abstract`, `summary`, `todo`, `caution`, `hint`, `important`
+Callouts:
 
-## 검색
+```mdx
+> [!note] Title
+> Content
+```
 
-- 메인 페이지의 검색창 또는 글 읽기 화면에서 `Ctrl+/`로 검색 오버레이 실행
-- 검색 인덱스는 빌드 시 생성되어 `/search-index.json`으로 제공
-- **한국어 초성 분해** 지원 — 예: "ㄴㄷ"로 "나도" 검색 가능
-- 퍼지 매칭 + 접두사 매칭 + 제목 가중치 적용
+YouTube:
 
-### 검색 필터
+```mdx
+<YouTubeEmbed id="VIDEO_ID" />
+```
 
-| 필터 | 설명 |
-|------|------|
-| 전체 | 제목 + 본문 + 주제어 |
-| 제목만 | 글 제목 |
-| 본문만 | 글 본문 |
-| 주제어만 | `base` 필드 태그 |
+Audio:
 
-### 키보드 단축키
+```mdx
+<audio controls src="https://example.com/audio.mp3" />
+```
 
-| 키 | 동작 |
-|----|------|
-| `Ctrl+/` | 검색 열기 |
-| `↑` / `↓` | 결과 이동 |
-| `←` / `→` | 필터 변경 |
-| `Enter` | 선택한 글로 이동 |
-| `Esc` | 검색 닫기 |
+Chapters:
 
-## 관련 글
+```mdx
+## 0:00 Intro
+## 1:30 Main section
+```
 
-글의 `base` 필드에 같은 주제어가 포함된 글이 있으면 글 하단에 자동으로 표시됩니다.
+Cues:
 
-## 라이선스
+```mdx
+▶ 0:05 This paragraph is tied to the media timestamp.
+```
+
+## Search And Topics
+
+- Global search opens with `Ctrl+/`.
+- Search index is served from `/search-index.json`.
+- `base` frontmatter values become topics.
+- Topic pages are available at `/topics/[topic]`.
+
+## Configuration
+
+Customize site metadata, excluded pages, footer links, and recent topic sources in `site.config.ts`.
+
+Customize colors and UI tokens in `app/globals.css`.
+
+## License
 
 MIT

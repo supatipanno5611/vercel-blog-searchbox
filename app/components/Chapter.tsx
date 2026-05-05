@@ -1,0 +1,48 @@
+'use client'
+
+import { useEffect, useId, useRef } from 'react'
+import { useCue } from './CueProvider'
+import styles from './Chapter.module.css'
+
+type Props = {
+  time: string
+  label: string
+  title: string
+}
+
+export default function Chapter({ time, label, title }: Props) {
+  const id = useId()
+  const ref = useRef<HTMLDivElement>(null)
+  const ctx = useCue()
+  const ctxRef = useRef(ctx)
+  ctxRef.current = ctx
+  const seconds = Number(time) || 0
+
+  useEffect(() => {
+    const c = ctxRef.current
+    if (!c || !ref.current) return
+    c.registerChapter(id, seconds, label, title, ref.current)
+    return () => c.unregisterChapter(id)
+  }, [id, seconds, label, title])
+
+  const isActive = ctx?.activeChapterId === id
+
+  return (
+    <div ref={ref} className={`${styles.chapter} ${isActive ? styles.active : ''}`}>
+      <div className={styles.line} />
+      <button
+        type="button"
+        className={styles.chip}
+        onClick={() => {
+            ctx?.jump(seconds)
+            ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }}
+        aria-label={`${label} ${title}로 이동`}
+      >
+        <span className={styles.label}>{label}</span>
+        <span className={styles.title}>{title}</span>
+      </button>
+      <div className={styles.line} />
+    </div>
+  )
+}

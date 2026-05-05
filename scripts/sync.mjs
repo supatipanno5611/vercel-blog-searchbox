@@ -6,7 +6,7 @@ import readline from 'node:readline/promises';
 
 // 본인 환경에 맞게 경로 수정해주세요.
 const VAULT_PUBLISH  = 'C:/보관소/지정폴더';         // 보관소 내 지정 폴더 절대 위치
-const VERCEL_CONTENT = 'C:/vercel-blog-searchbox/content/post';    // Vercel blog content 폴더 절대 위치
+const VERCEL_CONTENT = 'C:/vercel-blog-searchbox/content';    // Vercel blog content 폴더 절대 위치
 const MANIFEST_PATH  = 'C:/vercel-blog-searchbox/.sync-state.json'; // 동기화 상태 파일 (gitignore 권장)
 
 const AUTO_YES = argv.includes('--yes');

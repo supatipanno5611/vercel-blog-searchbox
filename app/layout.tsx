@@ -2,11 +2,12 @@ import type { Metadata, Viewport } from 'next'
 import ScrollProgress from '@/app/components/ScrollProgress'
 import ShareFab from '@/app/components/ShareFab'
 import Search from '@/app/components/Search'
+import { siteConfig } from '@/site.config'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'sakko',
-  description: '',
+  title: siteConfig.title,
+  description: siteConfig.description,
 }
 
 export const viewport: Viewport = {

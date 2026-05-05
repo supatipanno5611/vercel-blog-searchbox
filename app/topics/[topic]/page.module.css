@@ -1,0 +1,150 @@
+.main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: calc(120px + env(safe-area-inset-top)) 24px 120px;
+}
+
+@media (max-width: 600px) {
+  .main {
+    padding: calc(92px + env(safe-area-inset-top)) 20px 80px;
+  }
+}
+
+.header {
+  margin-bottom: 32px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--topic-chip-border);
+  border-radius: 999px;
+  padding: 5px 10px 5px 12px;
+  font-size: 0.9rem;
+}
+
+.chipMain {
+  color: var(--topic-chip-active-color);
+  background: var(--topic-chip-active-bg);
+}
+
+.chipExtra {
+  color: var(--color-muted);
+  background: var(--topic-chip-bg);
+}
+
+.chipRemove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.chipRemove:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.emptyHint,
+.empty,
+.fallbackNotice,
+.count {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-bottom: 20px;
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.recommendList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.recommendChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--topic-chip-border);
+  border-radius: 999px;
+  background: var(--topic-chip-bg);
+  color: var(--topic-chip-color);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 7px 12px;
+}
+
+.recommendChip:hover {
+  border-color: var(--topic-chip-hover-border);
+  color: var(--color-accent);
+}
+
+.recommendCount {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.fallbackNotice {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--topic-chip-bg);
+}
+
+.resetBtn,
+.moreBtn {
+  font: inherit;
+  color: var(--color-accent);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.resetBtn:hover,
+.moreBtn:hover {
+  color: var(--link-hover);
+}
+
+.list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.item {
+  display: block;
+  color: var(--color-text);
+  text-decoration: none;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.item:hover {
+  color: var(--color-accent);
+}
+
+.moreBtn {
+  margin-top: 28px;
+}

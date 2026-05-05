@@ -8,7 +8,7 @@
     display: block;
     position: fixed;
     inset: 0;
-    background: var(--overlay);
+    background: var(--color-overlay);
     z-index: 99;
   }
 }
@@ -27,7 +27,7 @@
     right: 0;
     z-index: 100;
     padding: 12px 16px;
-    background: var(--bg);
+    background: var(--color-bg);
     box-shadow: 0 2px 20px var(--shadow-sm);
   }
 }
@@ -62,13 +62,13 @@
     background: none;
     border: none;
     cursor: pointer;
-    color: var(--text);
+    color: var(--color-text);
     padding: 0;
     border-radius: 6px;
   }
 
   .backButton:hover {
-    background: var(--hover);
+    background: var(--color-hover);
   }
 
   .backButton svg {
@@ -82,7 +82,7 @@
   left: 12px;
   width: 16px;
   height: 16px;
-  color: var(--muted);
+  color: var(--color-muted);
   pointer-events: none;
   flex-shrink: 0;
 }
@@ -92,8 +92,8 @@
   left: 12px;
   width: 14px;
   height: 14px;
-  border: 1.5px solid var(--border);
-  border-top-color: var(--link);
+  border: 1.5px solid var(--search-input-border);
+  border-top-color: var(--search-input-focus);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
   pointer-events: none;
@@ -109,22 +109,22 @@
   font-family: inherit;
   font-size: 0.95rem;
   padding: 11px 38px 11px 38px;
-  border: 1.5px solid var(--border);
+  border: 1.5px solid var(--search-input-border);
   border-radius: 8px;
   outline: none;
-  background: var(--surface);
-  color: var(--text);
+  background: var(--search-input-bg);
+  color: var(--color-text);
   box-sizing: border-box;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .input::placeholder {
-  color: var(--muted);
+  color: var(--color-muted);
 }
 
 .input:focus {
-  border-color: var(--link);
-  box-shadow: 0 0 0 3px var(--focus-ring);
+  border-color: var(--search-input-focus);
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
 }
 
 .clear {
@@ -138,14 +138,14 @@
   background: none;
   border: none;
   cursor: pointer;
-  color: var(--muted);
+  color: var(--color-muted);
   padding: 0;
   border-radius: 4px;
   transition: color 0.1s;
 }
 
 .clear:hover {
-  color: var(--text);
+  color: var(--color-text);
 }
 
 .clear svg {
@@ -159,10 +159,10 @@
   top: calc(100% + 6px);
   left: 0;
   right: 0;
-  background: var(--dropdown-bg);
+  background: var(--search-dropdown-bg);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1.5px solid var(--border);
+  border: 1.5px solid var(--color-border);
   border-radius: 10px;
   z-index: 10;
   box-shadow: 0 8px 32px var(--shadow-md);
@@ -195,7 +195,7 @@
   display: flex;
   gap: 4px;
   padding: 8px 10px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .filterBtn {
@@ -205,20 +205,20 @@
   border-radius: 20px;
   border: 1px solid transparent;
   background: none;
-  color: var(--muted);
+  color: var(--color-muted);
   cursor: pointer;
   transition: background 0.1s, color 0.1s;
 }
 
 .filterBtn:hover {
-  background: var(--hover);
-  color: var(--text);
+  background: var(--search-active-bg);
+  color: var(--color-text);
 }
 
 .filterActive {
-  background: var(--hover);
-  border-color: var(--border);
-  color: var(--text);
+  background: var(--search-active-bg);
+  border-color: var(--color-border);
+  color: var(--color-text);
   font-weight: 500;
 }
 
@@ -254,31 +254,31 @@
 
 .results li:hover a,
 .active a {
-  background: var(--hover);
+  background: var(--search-active-bg);
 }
 
 .active a {
-  box-shadow: inset 2px 0 0 var(--link);
+  box-shadow: inset 2px 0 0 var(--search-active-indicator);
 }
 
 .title {
   font-size: 0.93rem;
   font-weight: 500;
-  color: var(--text);
+  color: var(--color-text);
 }
 
 .snippet {
   font-size: 0.81rem;
-  color: var(--muted);
+  color: var(--color-muted);
   line-height: 1.6;
 }
 
 .mark {
-  background: var(--mark);
+  background: var(--search-mark-bg);
   border-radius: 2px;
   padding: 0 2px;
   font-style: normal;
-  color: var(--text);
+  color: var(--color-text);
   font-weight: 600;
 }
 
@@ -292,8 +292,8 @@
   font-size: 0.76rem;
   padding: 1px 7px;
   border-radius: 20px;
-  background: var(--mark);
-  color: var(--text);
+  background: var(--search-tag-matched-bg);
+  color: var(--color-text);
   font-weight: 400;
 }
 
@@ -301,21 +301,31 @@
   font-size: 0.76rem;
   padding: 1px 7px;
   border-radius: 20px;
-  background: var(--hover);
-  color: var(--muted);
+  background: var(--search-tag-bg);
+  color: var(--color-muted);
+}
+
+.topicCount {
+  font-size: 0.78rem;
+  color: var(--color-muted);
+}
+
+.gotoTopicSearch {
+  font-size: 0.9rem;
+  color: var(--color-accent);
 }
 
 .empty {
   padding: 16px 14px;
   font-size: 0.88rem;
-  color: var(--muted);
+  color: var(--color-muted);
   text-align: center;
 }
 
 .guide {
   padding: 16px 14px;
   font-size: 0.88rem;
-  color: var(--muted);
+  color: var(--color-muted);
   text-align: center;
 }
 
@@ -323,7 +333,7 @@
 .overlayBackdrop {
   position: fixed;
   inset: 0;
-  background: var(--overlay);
+  background: var(--color-overlay);
   z-index: 199;
   animation: fadeIn 0.15s ease;
 }
@@ -335,7 +345,7 @@
   right: 0;
   z-index: 200;
   padding: 12px 16px;
-  background: var(--bg);
+  background: var(--color-bg);
   box-shadow: 0 2px 20px var(--shadow-sm);
   animation: fadeIn 0.15s ease;
 }
@@ -403,8 +413,8 @@
   display: flex;
   gap: 12px;
   padding: 6px 14px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--color-border);
   font-size: 0.72rem;
-  color: var(--muted);
+  color: var(--color-muted);
   user-select: none;
 }

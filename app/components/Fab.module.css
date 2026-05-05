@@ -1,27 +1,27 @@
 .fab {
   position: fixed;
   z-index: 50;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
+  width: var(--fab-size);
+  height: var(--fab-size);
+  border-radius: var(--fab-radius);
   border: none;
-  background: var(--text);
-  color: var(--bg);
+  background: var(--fab-bg);
+  color: var(--fab-color);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 12px var(--shadow-sm);
+  box-shadow: var(--fab-shadow);
   transition: transform 0.25s ease, opacity 0.25s ease;
 }
 
 .fab:hover {
-  opacity: 0.85;
+  opacity: var(--fab-hover-opacity);
 }
 
 .fab svg {
-  width: 18px;
-  height: 18px;
+  width: var(--fab-icon-size);
+  height: var(--fab-icon-size);
 }
 
 .fabHidden {

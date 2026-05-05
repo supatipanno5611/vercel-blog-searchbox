@@ -6,10 +6,12 @@ import { remarkPlainText } from './lib/remark-plain-text'
 import { remarkMark } from './lib/remark-mark'
 import { remarkCallout } from './lib/remark-callout'
 import { remarkWikiLink } from './lib/remark-wiki-link'
+import { remarkCue } from './lib/remark-cue'
+import { remarkChapter } from './lib/remark-chapter'
 
 const posts = defineCollection({
   name: 'Post',
-  pattern: 'posts/**/*.mdx',
+  pattern: '**/*.mdx',
   schema: s.object({
     draft: s.boolean().default(false),
     base: s.string().array().default([]),
@@ -25,8 +27,9 @@ const posts = defineCollection({
     return {
       ...data,
       title: filename,
-      slugAsParams: data.slug.replace(/^posts\//, '').replace(/\s+/g, '-'),
+      slugAsParams: data.slug.replace(/\s+/g, '-'),
       plainText: file.data.plainText ?? '',
+      hasAudio: /<audio[\s/>]/i.test(raw ?? ''),
     }
   }),
 })
@@ -39,6 +42,6 @@ export default defineConfig({
   },
   collections: { posts },
   mdx: {
-    remarkPlugins: [remarkMark, remarkCallout, remarkWikiLink],
+    remarkPlugins: [remarkMark, remarkCallout, remarkWikiLink, remarkCue, remarkChapter],
   },
 })

@@ -4,7 +4,7 @@
   left: 0;
   right: 0;
   height: 4px;
-  background: var(--link);
+  background: var(--color-accent);
   transform-origin: left;
   z-index: 100;
   pointer-events: none;

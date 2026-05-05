@@ -1,7 +1,11 @@
 import { notFound } from 'next/navigation'
 import { posts } from '#site/content'
 import { MDXContent } from '@/app/components/MDXContent'
+import AudioFab from '@/app/components/AudioFab'
+import AudioSeekbar from '@/app/components/AudioSeekbar'
+import { CueProvider } from '@/app/components/CueProvider'
 import Header from '@/app/components/Header'
+import { overlapCount, jaccard } from '@/lib/topics'
 import styles from './page.module.css'
 
 type Props = {
@@ -23,28 +27,56 @@ export default async function PostPage({ params }: Props) {
 
   if (!post) notFound()
 
-  const relatedPosts = post.base.length > 0
-    ? posts.filter((p) => !p.draft && p.slugAsParams !== post.slugAsParams && p.base.some((b) => post.base.includes(b))).slice(0, 5)
-    : []
+  const relatedPosts =
+    post.base.length > 0
+      ? posts
+          .filter((p) => !p.draft && p.slugAsParams !== post.slugAsParams && p.base.some((b) => post.base.includes(b)))
+          .map((p) => ({ p, overlap: overlapCount(p.base, post.base), sim: jaccard(p.base, post.base) }))
+          .sort((a, b) => b.overlap - a.overlap || b.sim - a.sim)
+          .slice(0, 5)
+          .map((x) => x.p)
+      : []
 
   return (
-    <main className={styles.main}>
-      <Header title={post.title} />
-      <article className={styles.article}>
-        <MDXContent code={post.body} />
-      </article>
-      {relatedPosts.length > 0 && (
-        <footer className={styles.footer}>
-          <p className={styles.footerLabel}>같은 주제의 글</p>
-          <ul className={styles.relatedList}>
-            {relatedPosts.map((p) => (
-              <li key={p.slug}>
-                <a href={`/${p.slugAsParams}`} className={styles.relatedLink}>{p.title}</a>
-              </li>
-            ))}
-          </ul>
-        </footer>
-      )}
-    </main>
+    <CueProvider>
+      <main className={styles.main} data-has-audio={post.hasAudio || undefined}>
+        <Header title={post.title} showAudioRepeat={post.hasAudio} />
+        {post.hasAudio && <AudioSeekbar />}
+        <article className={styles.article}>
+          <MDXContent code={post.body} />
+        </article>
+        {post.hasAudio && <AudioFab />}
+        {post.base.length > 0 && (
+          <footer className={styles.footer}>
+            <div className={styles.topicsBlock}>
+              <p className={styles.footerLabel}>Topics</p>
+              <ul className={styles.topicChipList}>
+                {post.base.map((base) => (
+                  <li key={base}>
+                    <a href={`/topics/${encodeURIComponent(base)}`} className={styles.topicChip}>
+                      {base}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            {relatedPosts.length > 0 && (
+              <div>
+                <p className={styles.footerLabel}>Related posts</p>
+                <ul className={styles.relatedList}>
+                  {relatedPosts.map((p) => (
+                    <li key={p.slug}>
+                      <a href={`/${p.slugAsParams}`} className={styles.relatedLink}>
+                        {p.title}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </footer>
+        )}
+      </main>
+    </CueProvider>
   )
 }

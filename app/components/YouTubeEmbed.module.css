@@ -1,0 +1,27 @@
+.sticky {
+  position: sticky;
+  top: calc(env(safe-area-inset-top) + 64px);
+  z-index: 5;
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  margin-top: -56px;
+  margin-bottom: 24px;
+  background: var(--media-sticky-bg);
+}
+
+.sticky :global(lite-youtube) {
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: 50vh;
+  background-position: center center;
+  background-size: cover;
+}
+
+@media (max-width: 600px) {
+  .sticky {
+    top: calc(max(env(safe-area-inset-top), 24px) + 64px);
+    margin-top: calc(max(env(safe-area-inset-top), 24px) + 64px - 100px - env(safe-area-inset-top));
+  }
+}

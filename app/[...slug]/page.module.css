@@ -18,12 +18,46 @@
 .footer {
   border-top: 1px solid var(--border);
   padding-top: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
 }
 
 .footerLabel {
   font-size: 0.875rem;
   color: var(--muted);
   margin-bottom: 16px;
+}
+
+.topicsBlock {
+  display: flex;
+  flex-direction: column;
+}
+
+.topicChipList {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+}
+
+.topicChip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--topic-chip-border);
+  border-radius: 999px;
+  padding: 4px 10px;
+  color: var(--topic-chip-color);
+  font-size: 0.84rem;
+  text-decoration: none;
+  background: var(--topic-chip-bg);
+}
+
+.topicChip:hover {
+  border-color: var(--topic-chip-hover-border);
+  color: var(--color-accent);
 }
 
 .relatedList {
@@ -37,10 +71,10 @@
 
 .relatedLink {
   font-size: 0.93rem;
-  color: var(--text);
+  color: var(--color-text);
   text-decoration: none;
 }
 
 .relatedLink:hover {
-  color: var(--link);
+  color: var(--color-accent);
 }
