@@ -1,4 +1,4 @@
-# my-blog
+# vercel blog template
 
 Next.js 기반 Markdown 블로그 템플릿입니다. 한국어 검색, 토픽 탐색, Obsidian 스타일 Markdown 확장 문법, 오디오/영상 노트 기능을 지원합니다.
 
