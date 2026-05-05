@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { Suspense } from 'react'
+import { safeDecodeURIComponent } from '@/lib/safe-decode'
 import { getAllTopics, getPostsByTopic } from '@/lib/topics'
 import { getRecentTopics } from '@/lib/recentTopics'
 import TopicsClient from './TopicsClient'
@@ -14,7 +15,8 @@ export async function generateStaticParams() {
 
 export default async function TopicPage({ params }: Props) {
   const { topic } = await params
-  const decodedTopic = decodeURIComponent(topic)
+  const decodedTopic = safeDecodeURIComponent(topic)
+  if (!decodedTopic) notFound()
   const allTopics = getAllTopics()
   if (!allTopics.some((t) => t.name === decodedTopic)) notFound()
 

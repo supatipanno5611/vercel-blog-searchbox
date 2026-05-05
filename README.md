@@ -1,12 +1,12 @@
 # my-blog
 
-Next.js 기반 MDX 블로그 템플릿입니다. 한국어 검색, 토픽 탐색, Obsidian 스타일 MDX 문법, 오디오/영상 노트 기능을 지원합니다.
+Next.js 기반 Markdown 블로그 템플릿입니다. 한국어 검색, 토픽 탐색, Obsidian 스타일 Markdown 확장 문법, 오디오/영상 노트 기능을 지원합니다.
 
 ## Stack
 
 - Next.js 16 App Router
 - React 19 + TypeScript
-- Velite for MDX content
+- Velite for Markdown content
 - MiniSearch + es-hangul for Korean search
 - lite-youtube-embed for YouTube notes
 
@@ -26,7 +26,7 @@ npm start
 
 ## Content
 
-MDX files live directly under `content/`.
+Markdown-only `.mdx` files live directly under `content/`.
 
 ```txt
 content/
@@ -53,7 +53,7 @@ base: [Next.js, MDX]
 본문...
 ```
 
-## MDX Features
+## Markdown Features
 
 Wiki links:
 
@@ -78,14 +78,16 @@ Callouts:
 YouTube:
 
 ```mdx
-<YouTubeEmbed id="VIDEO_ID" />
+::youtube{id="VIDEO_ID"}
 ```
 
 Audio:
 
 ```mdx
-<audio controls src="https://example.com/audio.mp3" />
+::audio{src="https://example.com/audio.mp3"}
 ```
+
+Raw HTML, JSX, JavaScript expressions, and `import`/`export` are not supported in content files.
 
 Chapters:
 

@@ -1,6 +1,13 @@
 import { visit, SKIP } from 'unist-util-visit'
 import type { Root, Blockquote } from 'mdast'
-import type { MdxJsxFlowElement } from 'mdast-util-mdx-jsx'
+
+type HtmlNode = Root['children'][number] & {
+  data: {
+    hName: string
+    hProperties?: Record<string, unknown>
+  }
+  children: Root['children']
+}
 
 const CALLOUT_TYPES = new Set([
   'note', 'tip', 'info', 'warning', 'danger', 'error', 'bug',
@@ -38,28 +45,34 @@ export function remarkCallout() {
         }
       }
 
-      const calloutNode: MdxJsxFlowElement = {
-        type: 'mdxJsxFlowElement',
-        name: 'div',
-        attributes: [
-          { type: 'mdxJsxAttribute', name: 'className', value: 'callout' },
-          { type: 'mdxJsxAttribute', name: 'data-type', value: type },
-        ],
+      const calloutNode: HtmlNode = {
+        type: 'blockquote',
+        data: {
+          hName: 'div',
+          hProperties: {
+            className: 'callout',
+            'data-type': type,
+          },
+        },
         children: [
           {
-            type: 'mdxJsxFlowElement',
-            name: 'div',
-            attributes: [{ type: 'mdxJsxAttribute', name: 'className', value: 'callout-title' }],
-            children: [{ type: 'text', value: title }] as unknown as MdxJsxFlowElement['children'],
+            type: 'paragraph',
+            data: {
+              hName: 'div',
+              hProperties: { className: 'callout-title' },
+            },
+            children: [{ type: 'text', value: title }],
           },
           {
-            type: 'mdxJsxFlowElement',
-            name: 'div',
-            attributes: [{ type: 'mdxJsxAttribute', name: 'className', value: 'callout-body' }],
+            type: 'blockquote',
+            data: {
+              hName: 'div',
+              hProperties: { className: 'callout-body' },
+            },
             children: node.children,
           },
         ],
-      }
+      } as HtmlNode
 
       parent.children[index] = calloutNode
       return SKIP

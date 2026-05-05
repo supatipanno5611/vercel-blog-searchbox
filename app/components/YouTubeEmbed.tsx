@@ -5,18 +5,6 @@ import 'lite-youtube-embed/src/lite-yt-embed.css'
 import { useCue, type YTPlayer } from './CueProvider'
 import styles from './YouTubeEmbed.module.css'
 
-declare module 'react' {
-  namespace JSX {
-    interface IntrinsicElements {
-      'lite-youtube': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
-        videoid?: string
-        params?: string
-        'js-api'?: string
-      }
-    }
-  }
-}
-
 type LiteYouTubeElement = HTMLElement & {
   getYTPlayer: () => Promise<YTPlayer>
 }
@@ -24,8 +12,7 @@ type LiteYouTubeElement = HTMLElement & {
 export default function YouTubeEmbed({ id }: { id: string }) {
   const ref = useRef<HTMLDivElement>(null)
   const ctx = useCue()
-  const ctxRef = useRef(ctx)
-  ctxRef.current = ctx
+  const setPlayer = ctx?.setPlayer
 
   useEffect(() => {
     void import('lite-youtube-embed')
@@ -38,12 +25,12 @@ export default function YouTubeEmbed({ id }: { id: string }) {
 
     const handleActivate = async () => {
       const player = await lite.getYTPlayer()
-      ctxRef.current?.setPlayer(player)
+      setPlayer?.(player)
     }
 
     lite.addEventListener('click', handleActivate, { once: true })
     return () => lite.removeEventListener('click', handleActivate)
-  }, [])
+  }, [setPlayer])
 
   return (
     <div ref={ref} className={styles.sticky}>

@@ -14,16 +14,15 @@ export default function Cue({ time, label, children }: Props) {
   const id = useId()
   const ref = useRef<HTMLDivElement>(null)
   const ctx = useCue()
-  const ctxRef = useRef(ctx)
-  ctxRef.current = ctx
+  const registerCue = ctx?.registerCue
+  const unregisterCue = ctx?.unregisterCue
   const seconds = Number(time) || 0
 
   useEffect(() => {
-    const c = ctxRef.current
-    if (!c || !ref.current) return
-    c.registerCue(id, seconds, ref.current)
-    return () => c.unregisterCue(id)
-  }, [id, seconds])
+    if (!registerCue || !unregisterCue || !ref.current) return
+    registerCue(id, seconds, ref.current)
+    return () => unregisterCue(id)
+  }, [id, seconds, registerCue, unregisterCue])
 
   const isActive = ctx?.activeCueId === id
 

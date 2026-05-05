@@ -1,6 +1,12 @@
 import { visit } from 'unist-util-visit'
 import type { Root, Text } from 'mdast'
-import type { MdxJsxTextElement } from 'mdast-util-mdx-jsx'
+
+type HtmlText = Text & {
+  data: {
+    hName: string
+    hProperties?: Record<string, unknown>
+  }
+}
 
 export function remarkWikiLink() {
   return (tree: Root) => {
@@ -11,7 +17,7 @@ export function remarkWikiLink() {
       const parts = node.value.split(/(\[\[.+?\]\])/g)
       if (parts.length === 1) return
 
-      const newNodes: (MdxJsxTextElement | Text)[] = parts
+      const newNodes: (HtmlText | Text)[] = parts
         .filter((p) => p !== '')
         .map((part) => {
           const match = part.match(/^\[\[(.+?)\]\]$/)
@@ -22,13 +28,15 @@ export function remarkWikiLink() {
           const label = alias?.trim() || pageName.trim()
 
           return {
-            type: 'mdxJsxTextElement',
-            name: 'a',
-            attributes: [
-              { type: 'mdxJsxAttribute', name: 'href', value: href },
-              { type: 'mdxJsxAttribute', name: 'className', value: 'wiki-link' },
-            ],
-            children: [{ type: 'text', value: label }],
+            type: 'text',
+            value: label,
+            data: {
+              hName: 'a',
+              hProperties: {
+                href,
+                className: 'wiki-link',
+              },
+            },
           }
         })
 

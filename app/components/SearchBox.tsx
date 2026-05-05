@@ -142,10 +142,16 @@ export default function SearchBox({ overlayMode = false, onClose, initialQuery }
     }
 
     setLoading(true)
-    loadIndex().then(() => {
-      setLoading(false)
-      if (queryRef.current.trim()) doSearch(queryRef.current, filterRef.current)
-    })
+    loadIndex()
+      .then(() => {
+        if (queryRef.current.trim()) doSearch(queryRef.current, filterRef.current)
+      })
+      .catch(() => {
+        resetResults()
+      })
+      .finally(() => {
+        setLoading(false)
+      })
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {

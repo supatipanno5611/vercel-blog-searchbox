@@ -1,6 +1,13 @@
 import type { Root, Paragraph, Text } from 'mdast'
-import type { MdxJsxFlowElement } from 'mdast-util-mdx-jsx'
 import { TIME_PATTERN, parseTime } from './parse-time'
+
+type HtmlNode = Root['children'][number] & {
+  data: {
+    hName: string
+    hProperties?: Record<string, unknown>
+  }
+  children: Paragraph[]
+}
 
 const CUE_RE = new RegExp(`^▶\\s*(${TIME_PATTERN})\\s+`)
 
@@ -33,15 +40,17 @@ export function remarkCue() {
         cueChildren.push(nodes[j] as Paragraph)
         j++
       }
-      const cue: MdxJsxFlowElement = {
-        type: 'mdxJsxFlowElement',
-        name: 'Cue',
-        attributes: [
-          { type: 'mdxJsxAttribute', name: 'time', value: String(seconds) },
-          { type: 'mdxJsxAttribute', name: 'label', value: m[1] },
-        ],
+      const cue: HtmlNode = {
+        type: 'blockquote',
+        data: {
+          hName: 'cue',
+          hProperties: {
+            time: String(seconds),
+            label: m[1],
+          },
+        },
         children: cueChildren,
-      }
+      } as HtmlNode
       out.push(cue)
       i = j
     }

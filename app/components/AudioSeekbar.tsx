@@ -10,8 +10,7 @@ export default function AudioSeekbar() {
   const [duration, setDuration] = useState(NaN)
   const seekingRef = useRef(false)
   const ctx = useCue()
-  const ctxRef = useRef(ctx)
-  ctxRef.current = ctx
+  const setPlayer = ctx?.setPlayer
 
   useEffect(() => {
     const audio = document.querySelector('audio')
@@ -24,27 +23,29 @@ export default function AudioSeekbar() {
       seekTo: (s: number) => { audio.currentTime = s },
       getCurrentTime: () => audio.currentTime,
     }
-    ctxRef.current?.setPlayer(adapter)
+    setPlayer?.(adapter)
 
     const onTimeUpdate = () => {
       if (!seekingRef.current) setCurrentTime(audio.currentTime)
     }
-    const onLoaded = () => setDuration(audio.duration)
-    const onDurationChange = () => setDuration(audio.duration)
+    const syncDuration = () => setDuration(audio.duration)
+    const syncAudioState = () => {
+      if (!isNaN(audio.duration)) setDuration(audio.duration)
+      setCurrentTime(audio.currentTime)
+    }
 
     audio.addEventListener('timeupdate', onTimeUpdate)
-    audio.addEventListener('loadedmetadata', onLoaded)
-    audio.addEventListener('durationchange', onDurationChange)
+    audio.addEventListener('loadedmetadata', syncDuration)
+    audio.addEventListener('durationchange', syncDuration)
 
-    if (!isNaN(audio.duration)) setDuration(audio.duration)
-    setCurrentTime(audio.currentTime)
+    queueMicrotask(syncAudioState)
 
     return () => {
       audio.removeEventListener('timeupdate', onTimeUpdate)
-      audio.removeEventListener('loadedmetadata', onLoaded)
-      audio.removeEventListener('durationchange', onDurationChange)
+      audio.removeEventListener('loadedmetadata', syncDuration)
+      audio.removeEventListener('durationchange', syncDuration)
     }
-  }, [])
+  }, [setPlayer])
 
   if (!isFinite(duration) || duration <= 0) return null
 

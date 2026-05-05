@@ -14,16 +14,15 @@ export default function AudioFab() {
     const audio = document.querySelector('audio')
     if (!audio) return
     audioRef.current = audio
-    const onPlay = () => setState('playing')
-    const onPause = () => setState('ready')
-    audio.addEventListener('play', onPlay)
-    audio.addEventListener('pause', onPause)
-    audio.addEventListener('ended', onPause)
-    setState(audio.paused ? 'ready' : 'playing')
+    const syncState = () => setState(audio.paused ? 'ready' : 'playing')
+    audio.addEventListener('play', syncState)
+    audio.addEventListener('pause', syncState)
+    audio.addEventListener('ended', syncState)
+    queueMicrotask(syncState)
     return () => {
-      audio.removeEventListener('play', onPlay)
-      audio.removeEventListener('pause', onPause)
-      audio.removeEventListener('ended', onPause)
+      audio.removeEventListener('play', syncState)
+      audio.removeEventListener('pause', syncState)
+      audio.removeEventListener('ended', syncState)
     }
   }, [])
 

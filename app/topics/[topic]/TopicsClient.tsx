@@ -1,7 +1,8 @@
 'use client'
 
 import { useSearchParams, useRouter } from 'next/navigation'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
+import { safeDecodeURIComponent } from '@/lib/safe-decode'
 import { overlapCount, jaccard } from '@/lib/topics'
 import TopicPicker from '@/app/components/TopicPicker'
 import { useHideOnScroll } from '@/app/components/useHideOnScroll'
@@ -29,16 +30,19 @@ export default function TopicsClient({ topic, posts, allTopics, recentTopics }: 
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  const extraTopics = searchParams.get('with')?.split(',').filter(Boolean).map(decodeURIComponent) ?? []
-  const selected = topic ? [topic, ...extraTopics] : extraTopics
+  const extraTopics = Array.from(new Set(
+    searchParams.get('with')
+      ?.split(',')
+      .map(safeDecodeURIComponent)
+      .filter((value): value is string => Boolean(value)) ?? []
+  ))
+  const selected = Array.from(new Set(topic ? [topic, ...extraTopics] : extraTopics))
+  const selectedKey = selected.join(',')
 
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [visibleCount, setVisibleCount] = useState(30)
+  const [visibleState, setVisibleState] = useState({ key: selectedKey, count: 30 })
+  const visibleCount = visibleState.key === selectedKey ? visibleState.count : 30
   const pickerVisible = useHideOnScroll()
-
-  useEffect(() => {
-    setVisibleCount(30)
-  }, [selected.join(',')])
 
   useCtrlSlash(useCallback(() => setPickerOpen(true), []))
 
@@ -162,7 +166,10 @@ export default function TopicsClient({ topic, posts, allTopics, recentTopics }: 
             ))}
           </ul>
           {sorted.length > visibleCount && (
-            <button className={styles.moreBtn} onClick={() => setVisibleCount((c) => c + 30)}>
+            <button
+              className={styles.moreBtn}
+              onClick={() => setVisibleState({ key: selectedKey, count: visibleCount + 30 })}
+            >
               Show more
             </button>
           )}

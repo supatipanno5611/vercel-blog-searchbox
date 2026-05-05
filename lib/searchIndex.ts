@@ -32,10 +32,17 @@ export function loadIndex(): Promise<void> {
   if (miniSearch) return Promise.resolve()
   if (!indexPromise) {
     indexPromise = fetch('/search-index.json')
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`Failed to load search index: ${r.status}`)
+        return r.json()
+      })
       .then((docs: SearchDoc[]) => {
         docsCache = docs
         miniSearch = buildIndex(docs)
+      })
+      .catch((error) => {
+        indexPromise = null
+        throw error
       })
   }
   return indexPromise

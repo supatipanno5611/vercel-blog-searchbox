@@ -40,16 +40,18 @@ export default function TopicPicker({
   const showFallback = query.trim() !== '' && filtered.length === 0
   const listLength = showFallback ? 1 : filtered.length
 
+  const close = () => {
+    setQuery('')
+    setActiveIndex(0)
+    onClose()
+  }
+
   useEffect(() => {
     activeItemRef.current?.scrollIntoView({ block: 'nearest' })
   }, [activeIndex])
 
   useEffect(() => {
-    if (!open) {
-      setQuery('')
-      setActiveIndex(0)
-      return
-    }
+    if (!open) return
 
     inputRef.current?.focus()
     const prev = document.body.style.overflow
@@ -69,6 +71,8 @@ export default function TopicPicker({
     } else if (e.key === 'Enter') {
       e.preventDefault()
       if (showFallback) {
+        setQuery('')
+        setActiveIndex(0)
         onFallbackSearch(query)
         return
       }
@@ -80,13 +84,15 @@ export default function TopicPicker({
         setQuery('')
         setActiveIndex(0)
       } else {
+        setQuery('')
+        setActiveIndex(0)
         onSingleSelect(topic.name)
       }
     } else if (e.key === 'Backspace' && query === '' && selected.length > 0) {
       e.preventDefault()
       onToggleSelect(selected[selected.length - 1])
     } else if (e.key === 'Escape') {
-      onClose()
+      close()
     }
   }
 
@@ -94,10 +100,10 @@ export default function TopicPicker({
 
   return (
     <>
-      {mounted && createPortal(<div className={searchStyles.overlayBackdrop} onClick={onClose} />, document.body)}
+      {mounted && createPortal(<div className={searchStyles.overlayBackdrop} onClick={close} />, document.body)}
       <div className={`${searchStyles.container} ${searchStyles.overlayContainer}`} role="dialog" aria-modal="true" aria-label="Topic search">
         <div className={searchStyles.inputWrap}>
-          <button className={searchStyles.backButton} onClick={onClose} aria-label="Close topic search">
+          <button className={searchStyles.backButton} onClick={close} aria-label="Close topic search">
             <svg viewBox="0 0 20 20" fill="none" aria-hidden>
               <polyline
                 points="12,4 6,10 12,16"

@@ -1,10 +1,11 @@
 import { notFound } from 'next/navigation'
 import { posts } from '#site/content'
-import { MDXContent } from '@/app/components/MDXContent'
+import { MarkdownContent } from '@/app/components/MarkdownContent'
 import AudioFab from '@/app/components/AudioFab'
 import AudioSeekbar from '@/app/components/AudioSeekbar'
 import { CueProvider } from '@/app/components/CueProvider'
 import Header from '@/app/components/Header'
+import { safeDecodeURIComponent } from '@/lib/safe-decode'
 import { overlapCount, jaccard } from '@/lib/topics'
 import styles from './page.module.css'
 
@@ -22,7 +23,13 @@ export async function generateStaticParams() {
 
 export default async function PostPage({ params }: Props) {
   const { slug } = await params
-  const path = slug.map((s) => decodeURIComponent(s)).join('/')
+  const decodedSlug: string[] = []
+  for (const segment of slug) {
+    const decodedSegment = safeDecodeURIComponent(segment)
+    if (decodedSegment === null) notFound()
+    decodedSlug.push(decodedSegment)
+  }
+  const path = decodedSlug.join('/')
   const post = posts.find((p) => p.slugAsParams === path)
 
   if (!post) notFound()
@@ -43,7 +50,7 @@ export default async function PostPage({ params }: Props) {
         <Header title={post.title} showAudioRepeat={post.hasAudio} />
         {post.hasAudio && <AudioSeekbar />}
         <article className={styles.article}>
-          <MDXContent code={post.body} />
+          <MarkdownContent source={post.body} />
         </article>
         {post.hasAudio && <AudioFab />}
         {post.base.length > 0 && (

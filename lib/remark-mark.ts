@@ -1,6 +1,11 @@
 import { visit } from 'unist-util-visit'
 import type { Root, Text } from 'mdast'
-import type { MdxJsxTextElement } from 'mdast-util-mdx-jsx'
+
+type HtmlText = Text & {
+  data: {
+    hName: string
+  }
+}
 
 export function remarkMark() {
   return (tree: Root) => {
@@ -11,15 +16,14 @@ export function remarkMark() {
       const parts = node.value.split(/(==.+?==)/g)
       if (parts.length === 1) return
 
-      const newNodes: (MdxJsxTextElement | Text)[] = parts
+      const newNodes: (HtmlText | Text)[] = parts
         .filter((p) => p !== '')
         .map((part) => {
           if (part.startsWith('==') && part.endsWith('==')) {
             return {
-              type: 'mdxJsxTextElement',
-              name: 'mark',
-              attributes: [],
-              children: [{ type: 'text', value: part.slice(2, -2) }],
+              type: 'text',
+              value: part.slice(2, -2),
+              data: { hName: 'mark' },
             }
           }
           return { type: 'text', value: part }

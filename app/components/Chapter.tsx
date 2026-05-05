@@ -14,16 +14,15 @@ export default function Chapter({ time, label, title }: Props) {
   const id = useId()
   const ref = useRef<HTMLDivElement>(null)
   const ctx = useCue()
-  const ctxRef = useRef(ctx)
-  ctxRef.current = ctx
+  const registerChapter = ctx?.registerChapter
+  const unregisterChapter = ctx?.unregisterChapter
   const seconds = Number(time) || 0
 
   useEffect(() => {
-    const c = ctxRef.current
-    if (!c || !ref.current) return
-    c.registerChapter(id, seconds, label, title, ref.current)
-    return () => c.unregisterChapter(id)
-  }, [id, seconds, label, title])
+    if (!registerChapter || !unregisterChapter || !ref.current) return
+    registerChapter(id, seconds, label, title, ref.current)
+    return () => unregisterChapter(id)
+  }, [id, seconds, label, title, registerChapter, unregisterChapter])
 
   const isActive = ctx?.activeChapterId === id
 

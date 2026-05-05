@@ -1,6 +1,13 @@
 import type { Root, Heading, Text } from 'mdast'
-import type { MdxJsxFlowElement } from 'mdast-util-mdx-jsx'
 import { TIME_PATTERN, parseTime } from './parse-time'
+
+type HtmlNode = Root['children'][number] & {
+  data: {
+    hName: string
+    hProperties?: Record<string, unknown>
+  }
+  children: []
+}
 
 const CHAPTER_RE = new RegExp(`^(${TIME_PATTERN})\\s+(.+)$`)
 
@@ -24,16 +31,19 @@ export function remarkChapter() {
         continue
       }
       const seconds = parseTime(m[1])
-      const chapter: MdxJsxFlowElement = {
-        type: 'mdxJsxFlowElement',
-        name: 'Chapter',
-        attributes: [
-          { type: 'mdxJsxAttribute', name: 'time', value: String(seconds) },
-          { type: 'mdxJsxAttribute', name: 'label', value: m[1] },
-          { type: 'mdxJsxAttribute', name: 'title', value: m[2] },
-        ],
+      const chapter: HtmlNode = {
+        type: 'heading',
+        depth: 2,
+        data: {
+          hName: 'chapter',
+          hProperties: {
+            time: String(seconds),
+            label: m[1],
+            title: m[2],
+          },
+        },
         children: [],
-      }
+      } as HtmlNode
       out.push(chapter)
     }
     tree.children = out
