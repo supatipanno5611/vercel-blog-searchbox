@@ -8,6 +8,7 @@ export type SearchDoc = {
   url: string
   body: string
   base: string
+  audioTitle: string
   tags: string[]
   choseong: string
 }
@@ -17,13 +18,15 @@ export function getSearchDocs(): SearchDoc[] {
     .filter((p) => !p.draft && !siteConfig.excludedSlugs.includes(p.slugAsParams))
     .map((p) => {
       const baseStr = p.base.join(' ')
-      const text = `${p.title} ${p.plainText} ${baseStr}`
+      const audioTitle = p.audioTitle ?? ''
+      const text = `${p.title} ${p.plainText} ${baseStr} ${audioTitle}`
       return {
         id: p.slugAsParams,
         title: p.title,
         url: `/${p.slugAsParams}`,
         body: p.plainText,
         base: baseStr,
+        audioTitle,
         tags: p.base,
         choseong: getChoseong(text),
       }

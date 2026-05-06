@@ -1,28 +1,22 @@
 'use client'
 
 import ReactMarkdown, { defaultUrlTransform, type Components, type UrlTransform } from 'react-markdown'
-import remarkDirective from 'remark-directive'
 import remarkGfm from 'remark-gfm'
 import { isSafeHref } from '@/lib/markdown-security'
 import { remarkCallout } from '@/lib/remark-callout'
 import { remarkChapter } from '@/lib/remark-chapter'
 import { remarkCue } from '@/lib/remark-cue'
-import { remarkDirectiveEmbeds } from '@/lib/remark-directive-embeds'
 import { remarkMark } from '@/lib/remark-mark'
 import { remarkMarkdownOnly } from '@/lib/remark-markdown-only'
 import { remarkWikiLink } from '@/lib/remark-wiki-link'
 import Chapter from './Chapter'
 import Cue from './Cue'
-import YouTubeEmbed from './YouTubeEmbed'
 
 type Props = {
   source: string
 }
 
 const components = {
-  youtube({ id }: { id?: string }) {
-    return id ? <YouTubeEmbed id={id} /> : null
-  },
   cue({ time, label, children }: { time?: string; label?: string; children?: React.ReactNode }) {
     if (!time || !label) return null
     return (
@@ -47,14 +41,12 @@ export function MarkdownContent({ source }: Props) {
     <ReactMarkdown
       remarkPlugins={[
         remarkGfm,
-        remarkDirective,
         remarkMarkdownOnly,
         remarkMark,
         remarkCallout,
         remarkWikiLink,
         remarkCue,
         remarkChapter,
-        remarkDirectiveEmbeds,
       ]}
       skipHtml
       urlTransform={urlTransform}

@@ -79,20 +79,17 @@ YouTube:
 
 ```md
 ---
-media: youtube
+youtubeId: VIDEO_ID
 ---
-
-::youtube{id="VIDEO_ID"}
 ```
 
 Audio:
 
 ```md
 ---
-media: audio
+audioSrc: https://example.com/audio.mp3
+audioTitle: Audio title
 ---
-
-::audio{src="https://example.com/audio.mp3"}
 ```
 
 Raw HTML, JSX, JavaScript expressions, and `import`/`export` are not supported in content files.
@@ -125,7 +122,7 @@ npm run content:check
 npm run content:fix
 ```
 
-`check` reports missing `base`, suspicious title/slug issues, broken wiki links, and media directive mismatches. `fix` only applies safe automatic fixes such as adding missing `base` or adding `media` when exactly one media directive exists.
+`check` reports missing `base`, suspicious title/slug issues, broken wiki links, and legacy media syntax. `fix` only applies safe automatic fixes such as adding missing `base` or migrating complete media directives to frontmatter.
 
 ## Configuration
 

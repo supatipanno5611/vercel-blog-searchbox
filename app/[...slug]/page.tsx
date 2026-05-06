@@ -5,6 +5,7 @@ import AudioFab from '@/app/components/AudioFab'
 import AudioSeekbar from '@/app/components/AudioSeekbar'
 import { CueProvider } from '@/app/components/CueProvider'
 import Header from '@/app/components/Header'
+import YouTubeEmbed from '@/app/components/YouTubeEmbed'
 import { safeDecodeURIComponent } from '@/lib/safe-decode'
 import { overlapCount, jaccard } from '@/lib/topics'
 import styles from './page.module.css'
@@ -46,19 +47,27 @@ export default async function PostPage({ params }: Props) {
   const backlinks = posts
     .filter((p) => !p.draft && p.slugAsParams !== post.slugAsParams && p.wikiLinks.includes(post.slugAsParams))
     .slice(0, 5)
-  const hasFooter = post.base.length > 0 || relatedPosts.length > 0 || backlinks.length > 0
+  const hasFooter = Boolean(post.audioTitle) || post.base.length > 0 || relatedPosts.length > 0 || backlinks.length > 0
 
   return (
     <CueProvider>
       <main className={styles.main} data-has-audio={post.hasAudio || undefined}>
         <Header title={post.title} showAudioRepeat={post.hasAudio} />
         {post.hasAudio && <AudioSeekbar />}
+        {post.youtubeId && <YouTubeEmbed id={post.youtubeId} />}
+        {post.audioSrc && <audio src={post.audioSrc} preload="metadata" />}
         <article className={styles.article}>
           <MarkdownContent source={post.body} />
         </article>
         {post.hasAudio && <AudioFab />}
         {hasFooter && (
           <footer className={styles.footer}>
+            {post.audioTitle && (
+              <div className={styles.audioBlock}>
+                <p className={styles.footerLabel}>Audio</p>
+                <p className={styles.audioTitle}>{post.audioTitle}</p>
+              </div>
+            )}
             {post.base.length > 0 && (
               <div className={styles.topicsBlock}>
                 <p className={styles.footerLabel}>Topics</p>

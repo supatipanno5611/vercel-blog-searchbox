@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useCue } from './CueProvider'
+import { scrollStartBelowHeader, useCue } from './CueProvider'
 import { useClickOutside } from './hooks/useClickOutside'
 import styles from './ChapterMenu.module.css'
 
@@ -50,7 +50,7 @@ export default function ChapterMenu() {
               className={`${styles.item} ${ctx?.activeChapterId === ch.id ? styles.itemActive : ''}`}
               onClick={() => {
                 ctx?.jump(ch.time)
-                ch.el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                scrollStartBelowHeader(ch.el)
                 setOpen(false)
               }}
             >

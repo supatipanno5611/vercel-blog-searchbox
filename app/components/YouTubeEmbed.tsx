@@ -33,7 +33,7 @@ export default function YouTubeEmbed({ id }: { id: string }) {
   }, [setPlayer])
 
   return (
-    <div ref={ref} className={styles.sticky}>
+    <div ref={ref} className={styles.embed}>
       <lite-youtube videoid={id} params="enablejsapi=1&playsinline=1" js-api="" />
     </div>
   )

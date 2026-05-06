@@ -12,6 +12,7 @@ const MANIFEST_PATH = resolve(process.env.SYNC_MANIFEST ?? join(ROOT, '.sync-sta
 
 const AUTO_YES = argv.includes('--yes')
 const MTIME_TOLERANCE_MS = 1000
+const INVISIBLE_TEXT_RE = /[\u200B\uFEFF]/g
 
 const LABEL = {
   add: '새 글을 content에 추가',
@@ -141,20 +142,45 @@ async function syncMarkdownFile(from, to) {
 }
 
 function convertLegacyMdxEmbeds(source) {
-  return source
-    .replace(/<YouTubeEmbed\s+([^>]*?)\/?>/gis, (_match, attrs) => {
-      const id = getQuotedAttribute(attrs, 'id')
-      if (!id) throw new Error('YouTubeEmbed is missing an id attribute')
-      return `::youtube{id="${escapeDirectiveAttribute(id)}"}`
-    })
-    .replace(/<audio\b([^>]*)>(?:\s*<\/audio>)?/gis, (_match, attrs) => {
-      const src = getQuotedAttribute(attrs, 'src')
-      const title = getQuotedAttribute(attrs, 'title')
-      if (!src) throw new Error('audio is missing a src attribute')
-      const normalizedSrc = normalizeAudioSrc(src)
-      const titlePart = title ? ` title="${escapeDirectiveAttribute(title)}"` : ''
-      return `::audio{src="${escapeDirectiveAttribute(normalizedSrc)}"${titlePart}}`
-    })
+  const parts = splitFrontmatter(removeInvisibleText(source))
+  const data = parseFrontmatter(parts.matter)
+  let body = transformOutsideFencedCode(parts.body, (segment) =>
+    segment
+      .replace(/<YouTubeEmbed\s+([^>]*?)\/?>/gis, (_match, attrs) => {
+        const id = getQuotedAttribute(attrs, 'id')
+        if (!id) throw new Error('YouTubeEmbed is missing an id attribute')
+        data.youtubeId = id
+        return ''
+      })
+      .replace(/<audio\b([^>]*)>(?:\s*<\/audio>)?/gis, (_match, attrs) => {
+        const src = getQuotedAttribute(attrs, 'src')
+        const title = getQuotedAttribute(attrs, 'title')
+        if (!src) throw new Error('audio is missing a src attribute')
+        const normalizedSrc = normalizeAudioSrc(src)
+        data.audioSrc = normalizedSrc
+        if (title) data.audioTitle = title.trim()
+        return ''
+      })
+      .replace(/::youtube\{([^}]*)\}/g, (_match, attrs) => {
+        const id = getQuotedAttribute(attrs, 'id')
+        if (!id) throw new Error('youtube directive is missing an id attribute')
+        data.youtubeId = id
+        return ''
+      })
+      .replace(/::audio\{([^}]*)\}/g, (_match, attrs) => {
+        const src = getQuotedAttribute(attrs, 'src')
+        const title = getQuotedAttribute(attrs, 'title')
+        if (!src) throw new Error('audio directive is missing a src attribute')
+        data.audioSrc = normalizeAudioSrc(src)
+        if (title) data.audioTitle = title.trim()
+        return ''
+      })
+      .replace(/\n{3,}/g, '\n\n')
+  )
+
+  delete data.media
+  const matter = stringifyFrontmatter(data)
+  return `${parts.start || '---\n'}${matter}${parts.end || '\n---\n'}${body}`
 }
 
 function normalizeAudioSrc(value) {
@@ -168,36 +194,125 @@ function getQuotedAttribute(attrs, name) {
   return match?.[2]
 }
 
-function escapeDirectiveAttribute(value) {
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r?\n/g, ' ')
+function removeInvisibleText(value) {
+  return value.replace(INVISIBLE_TEXT_RE, '')
+}
+
+function transformOutsideFencedCode(source, transform) {
+  const fenceRe = /(^|\n)(`{3,}|~{3,})[\s\S]*?\n\2(?=\n|$)/g
+  let out = ''
+  let last = 0
+  for (const match of source.matchAll(fenceRe)) {
+    out += transform(source.slice(last, match.index))
+    out += match[0]
+    last = match.index + match[0].length
+  }
+  out += transform(source.slice(last))
+  return out
+}
+
+function stripFencedCode(source) {
+  return source.replace(/(^|\n)(`{3,}|~{3,})[\s\S]*?\n\2(?=\n|$)/g, '$1')
+}
+
+function splitFrontmatter(source) {
+  const open = source.match(/^---\r?\n/)
+  if (!open) return { matter: null, body: source, start: '', end: '' }
+  const closeRe = /\r?\n---(?:\r?\n|$)/g
+  closeRe.lastIndex = open[0].length
+  const close = closeRe.exec(source)
+  if (!close) return { matter: null, body: source, start: '', end: '' }
+  return {
+    matter: source.slice(open[0].length, close.index),
+    body: source.slice(close.index + close[0].length),
+    start: open[0],
+    end: close[0],
+  }
+}
+
+function parseFrontmatter(matter) {
+  const data = {}
+  if (matter === null) return data
+  const lines = matter.split(/\r?\n/)
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const scalar = line.match(/^([A-Za-z][\w-]*):\s*(.*?)\s*$/)
+    if (!scalar) continue
+    const key = scalar[1]
+    const value = scalar[2]
+    if (value === '') {
+      const list = []
+      let j = i + 1
+      while (j < lines.length) {
+        const item = lines[j].match(/^\s*-\s*(.*?)\s*$/)
+        if (!item) break
+        list.push(unquote(item[1]))
+        j++
+      }
+      data[key] = list
+      i = j - 1
+    } else if (value.startsWith('[') && value.endsWith(']')) {
+      data[key] = value
+        .slice(1, -1)
+        .split(',')
+        .map((item) => unquote(item.trim()))
+        .filter(Boolean)
+    } else {
+      data[key] = unquote(value)
+    }
+  }
+  return data
+}
+
+function unquote(value) {
+  return value.replace(/^(['"])(.*)\1$/, '$2')
+}
+
+function yamlScalar(value) {
+  if (/^[A-Za-z0-9_./:%?&=#@+-]+$/.test(value)) return value
+  return JSON.stringify(value)
+}
+
+function stringifyFrontmatter(data) {
+  const lines = []
+  if (data.draft !== undefined) lines.push(`draft: ${data.draft}`)
+  if ((data.base ?? []).length === 0) {
+    lines.push('base: []')
+  } else {
+    lines.push('base:')
+    for (const base of data.base) lines.push(`  - ${base}`)
+  }
+  if (data.youtubeId) lines.push(`youtubeId: ${yamlScalar(data.youtubeId)}`)
+  if (data.audioSrc) lines.push(`audioSrc: ${yamlScalar(data.audioSrc)}`)
+  if (data.audioTitle) lines.push(`audioTitle: ${yamlScalar(data.audioTitle)}`)
+  return lines.join('\n')
 }
 
 function validateMarkdownOnly(source, filePath) {
   const errors = []
+  const markdownBody = stripFencedCode(source)
 
-  if (/^\s*(?:import|export)\s/m.test(source)) {
+  if (/^\s*(?:import|export)\s/m.test(markdownBody)) {
     errors.push('import/export is not allowed')
   }
-  if (/(^|[\s(>])\{[^}\n]+\}/.test(source)) {
+  if (/(^|[\s(>])\{[^}\n]+\}/.test(markdownBody)) {
     errors.push('MDX expressions are not allowed')
   }
-  if (/<[A-Za-z][^>]*>/.test(source)) {
+  if (/<[A-Za-z][^>]*>/.test(markdownBody)) {
     errors.push('raw HTML/JSX is not allowed')
   }
-  for (const match of source.matchAll(/::([A-Za-z][\w-]*)\b/g)) {
-    if (match[1] !== 'youtube' && match[1] !== 'audio') {
-      errors.push(`unsupported directive: ${match[1]}`)
-    }
+  for (const match of markdownBody.matchAll(/::([A-Za-z][\w-]*)\b/g)) {
+    errors.push(`unsupported directive: ${match[1]}`)
   }
-  for (const match of source.matchAll(/::youtube\{[^}]*\bid="([^"]+)"[^}]*\}/g)) {
-    if (!/^[A-Za-z0-9_-]{11}$/.test(match[1])) {
-      errors.push(`invalid YouTube id: ${match[1]}`)
-    }
-  }
-  for (const match of source.matchAll(/::audio\{[^}]*\bsrc="([^"]+)"[^}]*\}/g)) {
-    if (!isSafeAudioSrc(match[1])) {
-      errors.push(`invalid audio src: ${match[1]}`)
-    }
+  const { matter } = splitFrontmatter(source)
+  const data = parseFrontmatter(matter)
+  if (data.media !== undefined) errors.push('media frontmatter is not allowed')
+  if (data.youtubeId && data.audioSrc) errors.push('youtubeId and audioSrc cannot be used together')
+  if (data.youtubeId && !/^[A-Za-z0-9_-]{11}$/.test(data.youtubeId)) errors.push(`invalid YouTube id: ${data.youtubeId}`)
+  if (data.audioSrc && !isSafeAudioSrc(data.audioSrc)) errors.push(`invalid audio src: ${data.audioSrc}`)
+  if (data.audioSrc && !data.audioTitle?.trim()) errors.push('audioTitle required')
+  if (!data.audioSrc && data.audioTitle !== undefined) {
+    errors.push('audioTitle requires audioSrc')
   }
 
   if (errors.length > 0) {

@@ -19,10 +19,10 @@ let indexPromise: Promise<void> | null = null
 
 function buildIndex(docs: SearchDoc[]): MiniSearch {
   const ms = new MiniSearch({
-    fields: ['title', 'body', 'base', 'choseong'],
-    storeFields: ['title', 'url', 'body', 'base', 'tags'],
+    fields: ['title', 'body', 'base', 'audioTitle', 'choseong'],
+    storeFields: ['title', 'url', 'body', 'base', 'audioTitle', 'tags'],
     processTerm: (term) => disassemble(term),
-    searchOptions: { boost: { title: 3, base: 2 }, fuzzy: 0.2, prefix: true },
+    searchOptions: { boost: { title: 3, base: 2, audioTitle: 0.5 }, fuzzy: 0.2, prefix: true },
   })
   ms.addAll(docs)
   return ms

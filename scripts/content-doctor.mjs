@@ -7,10 +7,11 @@ import { siteConfig } from '../site.config.ts'
 const ROOT = cwd()
 const CONTENT_DIR = join(ROOT, 'content')
 const MODE = argv[2]
-const VALID_MEDIA = new Set(['audio', 'youtube'])
 const VALID_RULES = new Set(['base', 'titleSlug', 'wikiLinks', 'media', 'encoding'])
 const SUSPICIOUS_ENCODING_TOKENS = ['\uFFFD', '\u00C3', '\u00C2', '\u00EC', '\u00EB', '\u00ED', '\u00EA']
 const DOCTOR_CONFIG = siteConfig.contentDoctor ?? {}
+const YOUTUBE_ID_RE = /^[A-Za-z0-9_-]{11}$/
+const INVISIBLE_TEXT_RE = /[\u200B\uFEFF]/g
 
 if (MODE !== 'check' && MODE !== 'fix') {
   console.error('Usage: node scripts/content-doctor.mjs <check|fix>')
@@ -102,6 +103,11 @@ function unquote(value) {
   return value.replace(/^(['"])(.*)\1$/, '$2')
 }
 
+function yamlScalar(value) {
+  if (/^[A-Za-z0-9_./:%?&=#@+-]+$/.test(value)) return value
+  return JSON.stringify(value)
+}
+
 function stringifyFrontmatter(data) {
   const lines = []
   if (data.draft !== undefined) lines.push(`draft: ${data.draft}`)
@@ -111,7 +117,9 @@ function stringifyFrontmatter(data) {
     lines.push('base:')
     for (const base of data.base) lines.push(`  - ${base}`)
   }
-  if (data.media) lines.push(`media: ${data.media}`)
+  if (data.youtubeId) lines.push(`youtubeId: ${yamlScalar(data.youtubeId)}`)
+  if (data.audioSrc) lines.push(`audioSrc: ${yamlScalar(data.audioSrc)}`)
+  if (data.audioTitle) lines.push(`audioTitle: ${yamlScalar(data.audioTitle)}`)
   return lines.join('\n')
 }
 
@@ -120,6 +128,25 @@ function detectMediaDirectives(body) {
     audio: /::audio\b/.test(body),
     youtube: /::youtube\b/.test(body),
   }
+}
+
+function getDirectiveAttribute(attrs, name) {
+  const match = attrs.match(new RegExp(`\\b${name}\\s*=\\s*(["'])([\\s\\S]*?)\\1`, 'i'))
+  return match?.[2]
+}
+
+function getMediaDirectives(body) {
+  const directives = []
+  for (const match of body.matchAll(/::(youtube|audio)\{([^}]*)\}/g)) {
+    directives.push({
+      type: match[1],
+      source: match[0],
+      id: getDirectiveAttribute(match[2], 'id'),
+      src: getDirectiveAttribute(match[2], 'src'),
+      title: getDirectiveAttribute(match[2], 'title'),
+    })
+  }
+  return directives
 }
 
 function stripFencedCode(source) {
@@ -173,9 +200,26 @@ function addIssue(issues, severity, file, message) {
 
 function applyFixes(source, data, parts) {
   if (parts.matter === null) {
-    return `---\n${stringifyFrontmatter(data)}\n---\n${source}`
+    return `---\n${stringifyFrontmatter(data)}\n---\n${parts.body}`
   }
   return `${parts.start}${stringifyFrontmatter(data)}${parts.end}${parts.body}`
+}
+
+function removeInvisibleText(value) {
+  return value.replace(INVISIBLE_TEXT_RE, '')
+}
+
+function removeDirective(body, directive) {
+  return body.replace(directive.source, '').replace(/\n{3,}/g, '\n\n')
+}
+
+function isSafeAudioSrc(value) {
+  if (value.startsWith('/') && !value.startsWith('//') && !/[^\S\r\n]/.test(value)) return true
+  try {
+    return new URL(value).protocol === 'https:'
+  } catch {
+    return false
+  }
 }
 
 async function main() {
@@ -195,6 +239,7 @@ async function main() {
     const data = parseFrontmatter(parts.matter)
     const markdownBody = stripFencedCode(parts.body)
     const directives = detectMediaDirectives(markdownBody)
+    const mediaDirectives = getMediaDirectives(markdownBody)
     const rel = relative(ROOT, file)
     const slug = slugForFile(file)
     const exceptions = getExceptionContext(file, slug)
@@ -235,24 +280,73 @@ async function main() {
 
     const directiveTypes = [directives.audio && 'audio', directives.youtube && 'youtube'].filter(Boolean)
     if (checks.media) {
-      if (data.media !== undefined && !VALID_MEDIA.has(data.media)) {
-        addIssue(issues, 'error', file, `invalid media value: ${data.media}`)
+      if (data.media !== undefined) {
+        addIssue(issues, 'fixable', file, 'legacy media frontmatter should be removed')
+        delete data.media
+        dirty = true
       }
       if (directiveTypes.length > 1) {
         addIssue(issues, 'error', file, 'audio and youtube directives cannot be used together')
-      } else if (directiveTypes.length === 1 && data.media === undefined) {
-        addIssue(issues, 'fixable', file, `missing media frontmatter; expected ${directiveTypes[0]}`)
-        data.media = directiveTypes[0]
-        dirty = true
-      } else if (directiveTypes.length === 1 && data.media !== directiveTypes[0]) {
-        addIssue(issues, 'error', file, `media is ${data.media}, but directive is ${directiveTypes[0]}`)
-      } else if (directiveTypes.length === 0 && data.media !== undefined) {
-        addIssue(issues, 'error', file, `media is ${data.media}, but no matching directive exists`)
+      } else if (mediaDirectives.length > 1) {
+        addIssue(issues, 'error', file, 'multiple media directives are not supported')
+      } else if (mediaDirectives.length === 1) {
+        const directive = mediaDirectives[0]
+        if (directive.type === 'youtube') {
+          if (!directive.id || !YOUTUBE_ID_RE.test(directive.id)) {
+            addIssue(issues, 'error', file, `invalid YouTube id: ${directive.id ?? '<missing>'}`)
+          } else if (data.audioSrc) {
+            addIssue(issues, 'error', file, 'youtubeId and audioSrc cannot be used together')
+          } else {
+            addIssue(issues, 'fixable', file, 'migrate youtube directive to youtubeId frontmatter')
+            data.youtubeId = data.youtubeId ?? directive.id
+            parts.body = removeDirective(parts.body, directive)
+            dirty = true
+          }
+        } else if (directive.type === 'audio') {
+          if (!directive.src || !isSafeAudioSrc(directive.src)) {
+            addIssue(issues, 'error', file, `invalid audio src: ${directive.src ?? '<missing>'}`)
+          } else if (!directive.title?.trim() && !data.audioTitle?.trim()) {
+            addIssue(issues, 'error', file, 'audioTitle required')
+          } else if (data.youtubeId) {
+            addIssue(issues, 'error', file, 'youtubeId and audioSrc cannot be used together')
+          } else {
+            addIssue(issues, 'fixable', file, 'migrate audio directive to audioSrc/audioTitle frontmatter')
+            data.audioSrc = data.audioSrc ?? directive.src
+            data.audioTitle = data.audioTitle ?? directive.title.trim()
+            parts.body = removeDirective(parts.body, directive)
+            dirty = true
+          }
+        }
+      }
+      if (data.youtubeId && data.audioSrc) {
+        addIssue(issues, 'error', file, 'youtubeId and audioSrc cannot be used together')
+      }
+      if (data.youtubeId && !YOUTUBE_ID_RE.test(data.youtubeId)) {
+        addIssue(issues, 'error', file, `invalid YouTube id: ${data.youtubeId}`)
+      }
+      if (data.audioSrc && !isSafeAudioSrc(data.audioSrc)) {
+        addIssue(issues, 'error', file, `invalid audio src: ${data.audioSrc}`)
+      }
+      if (data.audioSrc && !data.audioTitle?.trim()) {
+        addIssue(issues, 'error', file, 'audioTitle required')
+      }
+      if (!data.audioSrc && data.audioTitle !== undefined) {
+        addIssue(issues, 'error', file, 'audioTitle requires audioSrc')
       }
     }
 
-    if (checks.encoding && SUSPICIOUS_ENCODING_TOKENS.some((token) => source.includes(token))) {
-      addIssue(issues, 'warn', file, 'possible broken Korean encoding')
+    if (checks.encoding) {
+      if (INVISIBLE_TEXT_RE.test(source)) {
+        addIssue(issues, 'fixable', file, 'invisible zero-width characters should be removed')
+        parts.matter = parts.matter === null ? null : removeInvisibleText(parts.matter)
+        parts.body = removeInvisibleText(parts.body)
+        dirty = true
+      }
+      INVISIBLE_TEXT_RE.lastIndex = 0
+
+      if (SUSPICIOUS_ENCODING_TOKENS.some((token) => source.includes(token))) {
+        addIssue(issues, 'warn', file, 'possible broken Korean encoding')
+      }
     }
 
     if (MODE === 'fix' && dirty) {

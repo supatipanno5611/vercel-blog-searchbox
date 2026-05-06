@@ -19,6 +19,7 @@ function getFieldBadges(fields: Set<string>): string[] {
   if (fields.has('title')) badges.push('Title')
   if (fields.has('body')) badges.push('Body')
   if (fields.has('base')) badges.push('Topic')
+  if (fields.has('audioTitle')) badges.push('Audio')
   if (!badges.length && fields.has('choseong')) badges.push('Text')
   return badges
 }
@@ -90,6 +91,7 @@ export default function SearchResults({
             : []
           const fieldBadges = getFieldBadges(matchedFields)
           const showTags = result.tags.length > 0 && filter === 'all' && matchedFields.has('base')
+          const showAudioTitle = result.audioTitle && filter === 'all' && matchedFields.has('audioTitle')
           const isActive = i === activeIndex
 
           return (
@@ -122,6 +124,12 @@ export default function SearchResults({
                         {highlight(tag, query, styles.mark, searchTerms)}
                       </span>
                     ))}
+                  </span>
+                )}
+                {showAudioTitle && (
+                  <span className={styles.audioMeta}>
+                    <span className={styles.audioMetaLabel}>Audio</span>
+                    <span>{highlight(result.audioTitle, query, styles.mark, searchTerms)}</span>
                   </span>
                 )}
                 {snippets.map((snippet) => (

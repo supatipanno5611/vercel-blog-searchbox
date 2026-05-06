@@ -25,6 +25,20 @@ type CueContextValue = {
 }
 
 const CueContext = createContext<CueContextValue | null>(null)
+const HEADER_SCROLL_GAP = 16
+
+export function scrollStartBelowHeader(el: HTMLElement) {
+  const rect = el.getBoundingClientRect()
+  const header = document.querySelector('header')
+  const headerBottom = header?.getBoundingClientRect().bottom ?? 0
+  const maxScroll = document.documentElement.scrollHeight - window.innerHeight
+  const top = window.scrollY + rect.top - headerBottom - HEADER_SCROLL_GAP
+
+  window.scrollTo({
+    top: Math.max(0, Math.min(top, maxScroll)),
+    behavior: 'smooth',
+  })
+}
 
 export function useCue() {
   return useContext(CueContext)
@@ -100,7 +114,7 @@ export function CueProvider({ children }: { children: React.ReactNode }) {
         prevActiveCueIdRef.current = newCueId
         setActiveCueId(newCueId)
         if (newCueId && autoScrollRef.current && activeCue) {
-          activeCue.el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          scrollStartBelowHeader(activeCue.el)
         }
       }
 

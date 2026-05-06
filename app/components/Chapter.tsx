@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useId, useRef } from 'react'
-import { useCue } from './CueProvider'
+import { scrollStartBelowHeader, useCue } from './CueProvider'
 import styles from './Chapter.module.css'
 
 type Props = {
@@ -34,7 +34,7 @@ export default function Chapter({ time, label, title }: Props) {
         className={styles.chip}
         onClick={() => {
             ctx?.jump(seconds)
-            ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            if (ref.current) scrollStartBelowHeader(ref.current)
           }}
         aria-label={`${label} ${title}로 이동`}
       >
