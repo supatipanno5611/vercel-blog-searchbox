@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { copyFile, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, readFile, readdir, rm } from 'node:fs/promises'
 import { dirname, join, relative, resolve } from 'node:path'
 import { argv, cwd, env, exit, stdin, stdout } from 'node:process'
 import readline from 'node:readline/promises'
@@ -10,12 +10,10 @@ import { siteConfig } from '../site.config.ts'
 const ROOT = cwd()
 const SOURCE_ROOT = resolve(env.VAULT_PUBLISH ?? getRequiredConfig('VAULT_PUBLISH'))
 const TARGET_ROOT = resolve(env.VERCEL_CONTENT ?? join(ROOT, 'content'))
-const MANIFEST_PATH = resolve(env.SYNC_MANIFEST ?? join(ROOT, '.sync-state.json'))
 const CHECK_ONLY = argv.includes('--check')
-const INIT = argv.includes('--init')
 const AUTO_YES = argv.includes('--yes')
-const MANIFEST_VERSION = 1
 const EXCLUDED_DIRS = new Set(['.git', '.obsidian', '.trash', 'node_modules'])
+const ALLOWED_ARGS = new Set(['--check', '--yes'])
 
 function getRequiredConfig(name) {
   const value = siteConfig[name]
@@ -24,7 +22,7 @@ function getRequiredConfig(name) {
 }
 
 async function main() {
-  if (INIT && CHECK_ONLY) throw new Error('--init and --check cannot be used together.')
+  validateArgs()
   if (!existsSync(SOURCE_ROOT)) {
     throw new Error(`Source folder does not exist: ${SOURCE_ROOT}`)
   }
@@ -33,16 +31,9 @@ async function main() {
 
   const sourceFiles = await scanMarkdownFiles(SOURCE_ROOT)
   const targetFiles = await scanMarkdownFiles(TARGET_ROOT)
-  const manifest = INIT ? { files: new Map() } : await loadManifest()
-  const plan = INIT
-    ? buildInitPlan(sourceFiles, targetFiles)
-    : buildSyncPlan(sourceFiles, targetFiles, manifest.files)
+  const plan = buildPublishPlan(sourceFiles, targetFiles)
 
   printPlan(plan)
-
-  if (plan.conflicts.length > 0) {
-    throw new Error('Sync stopped because conflicts were found.')
-  }
 
   if (CHECK_ONLY) {
     exit(planHasWork(plan) ? 1 : 0)
@@ -50,11 +41,10 @@ async function main() {
 
   if (!planHasWork(plan)) {
     console.log('No changes.')
-    await saveManifest(await buildManifestFromCurrentState())
     return
   }
 
-  await validatePlannedWrites(plan)
+  await validateSourceFiles(sourceFiles)
 
   if (!AUTO_YES) {
     const rl = readline.createInterface({ input: stdin, output: stdout })
@@ -67,8 +57,15 @@ async function main() {
   }
 
   await applyPlan(plan)
-  await saveManifest(await buildManifestFromCurrentState())
   console.log('Sync complete.')
+}
+
+function validateArgs() {
+  const args = argv.slice(2)
+  for (const arg of args) {
+    if (arg === '--init') throw new Error('--init is no longer supported. Sync is now source-to-target publish-copy.')
+    if (!ALLOWED_ARGS.has(arg)) throw new Error(`Unknown option: ${arg}`)
+  }
 }
 
 async function scanMarkdownFiles(root) {
@@ -108,7 +105,7 @@ function sha256(content) {
   return createHash('sha256').update(content).digest('hex')
 }
 
-function buildInitPlan(sourceFiles, targetFiles) {
+function buildPublishPlan(sourceFiles, targetFiles) {
   const plan = emptyPlan()
   const keys = allKeys(sourceFiles, targetFiles)
 
@@ -116,100 +113,14 @@ function buildInitPlan(sourceFiles, targetFiles) {
     const source = sourceFiles.get(key)
     const target = targetFiles.get(key)
 
-    if (source && target && source.hash !== target.hash) {
-      plan.conflicts.push({
-        type: 'init-mismatch',
-        key,
-        reason: 'File exists on both sides with different content.',
-      })
-    } else if (source && !target) {
-      plan.copySourceToTarget.push({ key, from: source.path, to: targetPathFor(key) })
-    } else if (!source && target) {
-      plan.unmanagedTarget.push({ key, path: target.path })
-    } else if (source && target) {
-      plan.adopt.push({ key })
-    }
-  }
-
-  return plan
-}
-
-function buildSyncPlan(sourceFiles, targetFiles, manifestFiles) {
-  const plan = emptyPlan()
-  const keys = allKeys(sourceFiles, targetFiles, manifestFiles)
-
-  for (const key of keys) {
-    const source = sourceFiles.get(key)
-    const target = targetFiles.get(key)
-    const manifest = manifestFiles.get(key)
-
-    if (!manifest) {
-      if (source && target) {
-        if (source.hash === target.hash) {
-          plan.adopt.push({ key })
-        } else {
-          plan.conflicts.push({
-            type: 'untracked-mismatch',
-            key,
-            reason: 'File exists on both sides but is not in the manifest.',
-          })
-        }
-      } else if (source) {
-        plan.copySourceToTarget.push({ key, from: source.path, to: targetPathFor(key) })
-      } else if (target) {
-        plan.unmanagedTarget.push({ key, path: target.path })
-      }
-      continue
-    }
-
-    if (!source && !target) {
-      plan.removeFromManifest.push({ key })
+    if (source && (!target || source.hash !== target.hash)) {
+      const to = target?.path ?? targetPathFor(key)
+      plan.copySourceToTarget.push({ key, from: source.path, to })
       continue
     }
 
     if (!source && target) {
-      if (target.hash === manifest.targetHash) {
-        plan.deleteTarget.push({ key, path: target.path })
-      } else {
-        plan.conflicts.push({
-          type: 'source-deleted-target-changed',
-          key,
-          reason: 'Source was deleted and target changed since the last sync.',
-        })
-      }
-      continue
-    }
-
-    if (source && !target) {
-      if (source.hash === manifest.sourceHash) {
-        plan.deleteSource.push({ key, path: source.path })
-      } else {
-        plan.conflicts.push({
-          type: 'target-deleted-source-changed',
-          key,
-          reason: 'Target was deleted and source changed since the last sync.',
-        })
-      }
-      continue
-    }
-
-    const sourceChanged = source.hash !== manifest.sourceHash
-    const targetChanged = target.hash !== manifest.targetHash
-
-    if (sourceChanged && targetChanged) {
-      if (source.hash === target.hash) {
-        plan.adopt.push({ key })
-      } else {
-        plan.conflicts.push({
-          type: 'both-changed',
-          key,
-          reason: 'Both source and target changed since the last sync.',
-        })
-      }
-    } else if (sourceChanged) {
-      plan.copySourceToTarget.push({ key, from: source.path, to: target.path })
-    } else if (targetChanged) {
-      plan.copyTargetToSource.push({ key, from: target.path, to: source.path })
+      plan.deleteTarget.push({ key, path: target.path })
     }
   }
 
@@ -218,14 +129,8 @@ function buildSyncPlan(sourceFiles, targetFiles, manifestFiles) {
 
 function emptyPlan() {
   return {
-    adopt: [],
     copySourceToTarget: [],
-    copyTargetToSource: [],
-    deleteSource: [],
     deleteTarget: [],
-    removeFromManifest: [],
-    unmanagedTarget: [],
-    conflicts: [],
   }
 }
 
@@ -243,25 +148,15 @@ function targetPathFor(key) {
 
 function planHasWork(plan) {
   return (
-    plan.adopt.length > 0 ||
     plan.copySourceToTarget.length > 0 ||
-    plan.copyTargetToSource.length > 0 ||
-    plan.deleteSource.length > 0 ||
-    plan.deleteTarget.length > 0 ||
-    plan.removeFromManifest.length > 0
+    plan.deleteTarget.length > 0
   )
 }
 
 function printPlan(plan) {
-  console.log(INIT ? 'Init plan:' : 'Sync plan:')
-  printGroup('Adopt unchanged files', plan.adopt, (item) => item.key)
+  console.log('Publish-copy plan:')
   printGroup('Copy source -> target', plan.copySourceToTarget, (item) => item.key)
-  printGroup('Copy target -> source', plan.copyTargetToSource, (item) => item.key)
-  printGroup('Delete source', plan.deleteSource, (item) => item.key)
   printGroup('Delete target', plan.deleteTarget, (item) => item.key)
-  printGroup('Remove from manifest', plan.removeFromManifest, (item) => item.key)
-  printGroup('Unmanaged target files (skipped)', plan.unmanagedTarget, (item) => item.key)
-  printGroup('Conflicts', plan.conflicts, (item) => `${item.key} - ${item.reason}`)
 }
 
 function printGroup(label, items, format) {
@@ -270,14 +165,13 @@ function printGroup(label, items, format) {
   for (const item of items) console.log(`  - ${format(item)}`)
 }
 
-async function validatePlannedWrites(plan) {
-  const writes = [...plan.copySourceToTarget, ...plan.copyTargetToSource]
+async function validateSourceFiles(sourceFiles) {
   const errors = []
 
-  for (const item of writes) {
-    const source = await readFile(item.from, 'utf8')
+  for (const file of sourceFiles.values()) {
+    const source = await readFile(file.path, 'utf8')
     const fileErrors = validateMarkdownOnly(source)
-    for (const error of fileErrors) errors.push(`${item.key}: ${error}`)
+    for (const error of fileErrors) errors.push(`${file.key}: ${error}`)
   }
 
   if (errors.length > 0) {
@@ -355,62 +249,12 @@ function unquote(value) {
 
 async function applyPlan(plan) {
   for (const item of plan.copySourceToTarget) await copyMarkdownFile(item.from, item.to)
-  for (const item of plan.copyTargetToSource) await copyMarkdownFile(item.from, item.to)
-  for (const item of plan.deleteSource) await rm(item.path)
   for (const item of plan.deleteTarget) await rm(item.path)
 }
 
 async function copyMarkdownFile(from, to) {
   await mkdir(dirname(to), { recursive: true })
   await copyFile(from, to)
-}
-
-async function buildManifestFromCurrentState() {
-  const sourceFiles = await scanMarkdownFiles(SOURCE_ROOT)
-  const targetFiles = await scanMarkdownFiles(TARGET_ROOT)
-  const files = {}
-  const now = new Date().toISOString()
-
-  for (const key of allKeys(sourceFiles, targetFiles)) {
-    const source = sourceFiles.get(key)
-    const target = targetFiles.get(key)
-    if (!source || !target || source.hash !== target.hash) continue
-    files[key] = {
-      sourceHash: source.hash,
-      targetHash: target.hash,
-      lastSyncedAt: now,
-    }
-  }
-
-  return {
-    version: MANIFEST_VERSION,
-    sourceRoot: SOURCE_ROOT,
-    targetRoot: TARGET_ROOT,
-    files,
-  }
-}
-
-async function loadManifest() {
-  if (!existsSync(MANIFEST_PATH)) {
-    return { version: MANIFEST_VERSION, files: new Map() }
-  }
-
-  const raw = JSON.parse(await readFile(MANIFEST_PATH, 'utf8'))
-  if (raw.version !== MANIFEST_VERSION || !raw.files || Array.isArray(raw.files)) {
-    throw new Error(`Unsupported sync manifest schema: ${MANIFEST_PATH}. Run sync with --init to create a new manifest.`)
-  }
-
-  return {
-    version: raw.version,
-    sourceRoot: raw.sourceRoot,
-    targetRoot: raw.targetRoot,
-    files: new Map(Object.entries(raw.files)),
-  }
-}
-
-async function saveManifest(manifest) {
-  await mkdir(dirname(MANIFEST_PATH), { recursive: true })
-  await writeFile(MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
 }
 
 main().catch((error) => {

@@ -53,6 +53,16 @@ base: [Next.js, MD]
 본문...
 ```
 
+## Publish Copy
+
+```bash
+npm run sync
+npm run sync -- --check
+npm run sync -- --yes
+```
+
+`sync` treats `VAULT_PUBLISH` from `site.config.ts` as the source of truth and mirrors its Markdown files into `content/`. Target Markdown files that do not exist in the source are deleted. `--check` reports whether the mirror is stale without changing files, and `--yes` applies the plan without prompting.
+
 ## Markdown Features
 
 Wiki links:
