@@ -1,27 +1,21 @@
-import { readdir, readFile, writeFile, unlink, stat, mkdir } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { join, resolve } from 'node:path'
-import { argv, cwd, stdin, stdout } from 'node:process'
+import { copyFile, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { dirname, join, relative, resolve } from 'node:path'
+import { argv, cwd, env, exit, stdin, stdout } from 'node:process'
 import readline from 'node:readline/promises'
+import { isSafeAudioSrc, YOUTUBE_ID_RE } from '../lib/markdown-security.ts'
 import { siteConfig } from '../site.config.ts'
 
 const ROOT = cwd()
-const VAULT_PUBLISH = resolve(getRequiredConfig('VAULT_PUBLISH'))
-const VERCEL_CONTENT = resolve(process.env.VERCEL_CONTENT ?? join(ROOT, 'content'))
-const MANIFEST_PATH = resolve(process.env.SYNC_MANIFEST ?? join(ROOT, '.sync-state.json'))
-
+const SOURCE_ROOT = resolve(env.VAULT_PUBLISH ?? getRequiredConfig('VAULT_PUBLISH'))
+const TARGET_ROOT = resolve(env.VERCEL_CONTENT ?? join(ROOT, 'content'))
+const MANIFEST_PATH = resolve(env.SYNC_MANIFEST ?? join(ROOT, '.sync-state.json'))
+const CHECK_ONLY = argv.includes('--check')
+const INIT = argv.includes('--init')
 const AUTO_YES = argv.includes('--yes')
-const MTIME_TOLERANCE_MS = 1000
-const INVISIBLE_TEXT_RE = /[\u200B\uFEFF]/g
-
-const LABEL = {
-  add: '새 글을 content에 추가',
-  update: 'content 글 갱신',
-  'delete-publish': 'content에서 사라진 글을 _publish에서도 삭제',
-  'delete-vercel': '_publish에서 사라진 글을 content에서도 삭제',
-  'warn-vercel-newer': 'content가 더 최신이라 건너뜀',
-  'warn-orphan': 'content에만 있어서 건너뜀',
-}
+const MANIFEST_VERSION = 1
+const EXCLUDED_DIRS = new Set(['.git', '.obsidian', '.trash', 'node_modules'])
 
 function getRequiredConfig(name) {
   const value = siteConfig[name]
@@ -30,267 +24,272 @@ function getRequiredConfig(name) {
 }
 
 async function main() {
-  if (!existsSync(VAULT_PUBLISH)) {
-    throw new Error(`Publish folder does not exist: ${VAULT_PUBLISH}\nSet VAULT_PUBLISH to your Obsidian _publish folder.`)
+  if (INIT && CHECK_ONLY) throw new Error('--init and --check cannot be used together.')
+  if (!existsSync(SOURCE_ROOT)) {
+    throw new Error(`Source folder does not exist: ${SOURCE_ROOT}`)
   }
 
-  const manifestSet = new Set(await loadManifest())
-  await mkdir(VERCEL_CONTENT, { recursive: true })
+  await mkdir(TARGET_ROOT, { recursive: true })
 
-  const publishSet = new Set(
-    (await readdir(VAULT_PUBLISH))
-      .filter((file) => file.endsWith('.md'))
-      .map((file) => file.replace(/\.md$/, ''))
-  )
-  const vercelSet = new Set(
-    (await readdir(VERCEL_CONTENT))
-      .filter((file) => file.endsWith('.md'))
-      .map((file) => file.replace(/\.md$/, ''))
-  )
+  const sourceFiles = await scanMarkdownFiles(SOURCE_ROOT)
+  const targetFiles = await scanMarkdownFiles(TARGET_ROOT)
+  const manifest = INIT ? { files: new Map() } : await loadManifest()
+  const plan = INIT
+    ? buildInitPlan(sourceFiles, targetFiles)
+    : buildSyncPlan(sourceFiles, targetFiles, manifest.files)
 
-  const actions = []
-  const allNames = new Set([...publishSet, ...vercelSet, ...manifestSet])
+  printPlan(plan)
 
-  for (const name of allNames) {
-    const inPublish = publishSet.has(name)
-    const inVercel = vercelSet.has(name)
-    const inManifest = manifestSet.has(name)
-
-    if (inPublish && inVercel) {
-      const publishStat = await stat(join(VAULT_PUBLISH, `${name}.md`))
-      const vercelStat = await stat(join(VERCEL_CONTENT, `${name}.md`))
-      if (publishStat.mtimeMs > vercelStat.mtimeMs + MTIME_TOLERANCE_MS) {
-        actions.push({ type: 'update', name })
-      } else if (vercelStat.mtimeMs > publishStat.mtimeMs + MTIME_TOLERANCE_MS) {
-        actions.push({ type: 'warn-vercel-newer', name })
-      }
-    } else if (inPublish && !inVercel && !inManifest) {
-      actions.push({ type: 'add', name })
-    } else if (inPublish && !inVercel && inManifest) {
-      actions.push({ type: 'delete-publish', name })
-    } else if (!inPublish && inVercel && inManifest) {
-      actions.push({ type: 'delete-vercel', name })
-    } else if (!inPublish && inVercel && !inManifest) {
-      actions.push({ type: 'warn-orphan', name })
-    }
+  if (plan.conflicts.length > 0) {
+    throw new Error('Sync stopped because conflicts were found.')
   }
 
-  if (actions.length === 0) {
-    console.log('변경 사항 없음.')
-    await saveCurrentManifest(publishSet, vercelSet)
+  if (CHECK_ONLY) {
+    exit(planHasWork(plan) ? 1 : 0)
+  }
+
+  if (!planHasWork(plan)) {
+    console.log('No changes.')
+    await saveManifest(await buildManifestFromCurrentState())
     return
   }
 
-  console.log('계획:')
-  for (const action of actions) console.log(`  [${LABEL[action.type]}] ${action.name}`)
+  await validatePlannedWrites(plan)
 
   if (!AUTO_YES) {
     const rl = readline.createInterface({ input: stdin, output: stdout })
-    const answer = await rl.question('진행할까요? [y/N] ')
+    const answer = await rl.question('Apply this sync plan? [y/N] ')
     rl.close()
     if (answer.trim().toLowerCase() !== 'y') {
-      console.log('취소됨.')
+      console.log('Canceled.')
       return
     }
   }
 
-  for (const action of actions) {
-    const publishPath = join(VAULT_PUBLISH, `${action.name}.md`)
-    const vercelPath = join(VERCEL_CONTENT, `${action.name}.md`)
-
-    switch (action.type) {
-      case 'add':
-        await syncMarkdownFile(publishPath, vercelPath)
-        console.log(`  + content에 추가: ${action.name}`)
-        break
-      case 'update':
-        await syncMarkdownFile(publishPath, vercelPath)
-        console.log(`  ↻ content 갱신: ${action.name}`)
-        break
-      case 'delete-publish':
-        await unlink(publishPath)
-        console.log(`  - _publish에서 삭제: ${action.name}`)
-        break
-      case 'delete-vercel':
-        await unlink(vercelPath)
-        console.log(`  - content에서 삭제: ${action.name}`)
-        break
-      case 'warn-vercel-newer':
-        console.warn(`  ! content가 더 최신입니다. 수동 편집 가능성이 있어 건너뜀: ${action.name}`)
-        break
-      case 'warn-orphan':
-        console.warn(`  ! content에만 존재합니다. 추적된 파일이 아니라 건너뜀: ${action.name}`)
-        break
-    }
-  }
-
-  const finalPublish = new Set(
-    (await readdir(VAULT_PUBLISH)).filter((file) => file.endsWith('.md')).map((file) => file.replace(/\.md$/, ''))
-  )
-  const finalVercel = new Set(
-    (await readdir(VERCEL_CONTENT)).filter((file) => file.endsWith('.md')).map((file) => file.replace(/\.md$/, ''))
-  )
-  await saveCurrentManifest(finalPublish, finalVercel)
-  console.log('완료.')
+  await applyPlan(plan)
+  await saveManifest(await buildManifestFromCurrentState())
+  console.log('Sync complete.')
 }
 
-async function syncMarkdownFile(from, to) {
-  const source = await readFile(from, 'utf8')
-  const converted = convertLegacyMdxEmbeds(source)
-  validateMarkdownOnly(converted, from)
-  await writeFile(to, converted, 'utf8')
+async function scanMarkdownFiles(root) {
+  const files = new Map()
+  await scanDir(root, root, files)
+  return files
 }
 
-function convertLegacyMdxEmbeds(source) {
-  const parts = splitFrontmatter(removeInvisibleText(source))
-  const data = parseFrontmatter(parts.matter)
-  let body = transformOutsideFencedCode(parts.body, (segment) =>
-    segment
-      .replace(/<YouTubeEmbed\s+([^>]*?)\/?>/gis, (_match, attrs) => {
-        const id = getQuotedAttribute(attrs, 'id')
-        if (!id) throw new Error('YouTubeEmbed is missing an id attribute')
-        data.youtubeId = id
-        return ''
-      })
-      .replace(/<audio\b([^>]*)>(?:\s*<\/audio>)?/gis, (_match, attrs) => {
-        const src = getQuotedAttribute(attrs, 'src')
-        const title = getQuotedAttribute(attrs, 'title')
-        if (!src) throw new Error('audio is missing a src attribute')
-        const normalizedSrc = normalizeAudioSrc(src)
-        data.audioSrc = normalizedSrc
-        if (title) data.audioTitle = title.trim()
-        return ''
-      })
-      .replace(/::youtube\{([^}]*)\}/g, (_match, attrs) => {
-        const id = getQuotedAttribute(attrs, 'id')
-        if (!id) throw new Error('youtube directive is missing an id attribute')
-        data.youtubeId = id
-        return ''
-      })
-      .replace(/::audio\{([^}]*)\}/g, (_match, attrs) => {
-        const src = getQuotedAttribute(attrs, 'src')
-        const title = getQuotedAttribute(attrs, 'title')
-        if (!src) throw new Error('audio directive is missing a src attribute')
-        data.audioSrc = normalizeAudioSrc(src)
-        if (title) data.audioTitle = title.trim()
-        return ''
-      })
-      .replace(/\n{3,}/g, '\n\n')
-  )
-
-  delete data.media
-  const matter = stringifyFrontmatter(data)
-  return `${parts.start || '---\n'}${matter}${parts.end || '\n---\n'}${body}`
-}
-
-function normalizeAudioSrc(value) {
-  const collapsed = value.replace(/\s+/g, ' ').trim()
-  if (collapsed.startsWith('/')) return collapsed.replace(/ /g, '%20')
-  return new URL(collapsed).href
-}
-
-function getQuotedAttribute(attrs, name) {
-  const match = attrs.match(new RegExp(`\\b${name}\\s*=\\s*(["'])([\\s\\S]*?)\\1`, 'i'))
-  return match?.[2]
-}
-
-function removeInvisibleText(value) {
-  return value.replace(INVISIBLE_TEXT_RE, '')
-}
-
-function transformOutsideFencedCode(source, transform) {
-  const fenceRe = /(^|\n)(`{3,}|~{3,})[\s\S]*?\n\2(?=\n|$)/g
-  let out = ''
-  let last = 0
-  for (const match of source.matchAll(fenceRe)) {
-    out += transform(source.slice(last, match.index))
-    out += match[0]
-    last = match.index + match[0].length
-  }
-  out += transform(source.slice(last))
-  return out
-}
-
-function stripFencedCode(source) {
-  return source.replace(/(^|\n)(`{3,}|~{3,})[\s\S]*?\n\2(?=\n|$)/g, '$1')
-}
-
-function splitFrontmatter(source) {
-  const open = source.match(/^---\r?\n/)
-  if (!open) return { matter: null, body: source, start: '', end: '' }
-  const closeRe = /\r?\n---(?:\r?\n|$)/g
-  closeRe.lastIndex = open[0].length
-  const close = closeRe.exec(source)
-  if (!close) return { matter: null, body: source, start: '', end: '' }
-  return {
-    matter: source.slice(open[0].length, close.index),
-    body: source.slice(close.index + close[0].length),
-    start: open[0],
-    end: close[0],
-  }
-}
-
-function parseFrontmatter(matter) {
-  const data = {}
-  if (matter === null) return data
-  const lines = matter.split(/\r?\n/)
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    const scalar = line.match(/^([A-Za-z][\w-]*):\s*(.*?)\s*$/)
-    if (!scalar) continue
-    const key = scalar[1]
-    const value = scalar[2]
-    if (value === '') {
-      const list = []
-      let j = i + 1
-      while (j < lines.length) {
-        const item = lines[j].match(/^\s*-\s*(.*?)\s*$/)
-        if (!item) break
-        list.push(unquote(item[1]))
-        j++
+async function scanDir(root, dir, files) {
+  const entries = await readdir(dir, { withFileTypes: true })
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      if (!EXCLUDED_DIRS.has(entry.name)) {
+        await scanDir(root, join(dir, entry.name), files)
       }
-      data[key] = list
-      i = j - 1
-    } else if (value.startsWith('[') && value.endsWith(']')) {
-      data[key] = value
-        .slice(1, -1)
-        .split(',')
-        .map((item) => unquote(item.trim()))
-        .filter(Boolean)
-    } else {
-      data[key] = unquote(value)
+      continue
+    }
+
+    if (!entry.isFile() || !entry.name.endsWith('.md')) continue
+
+    const path = join(dir, entry.name)
+    const key = toRelativeKey(root, path)
+    const content = await readFile(path)
+    files.set(key, {
+      key,
+      path,
+      hash: sha256(content),
+    })
+  }
+}
+
+function toRelativeKey(root, path) {
+  return relative(root, path).replace(/\\/g, '/')
+}
+
+function sha256(content) {
+  return createHash('sha256').update(content).digest('hex')
+}
+
+function buildInitPlan(sourceFiles, targetFiles) {
+  const plan = emptyPlan()
+  const keys = allKeys(sourceFiles, targetFiles)
+
+  for (const key of keys) {
+    const source = sourceFiles.get(key)
+    const target = targetFiles.get(key)
+
+    if (source && target && source.hash !== target.hash) {
+      plan.conflicts.push({
+        type: 'init-mismatch',
+        key,
+        reason: 'File exists on both sides with different content.',
+      })
+    } else if (source && !target) {
+      plan.copySourceToTarget.push({ key, from: source.path, to: targetPathFor(key) })
+    } else if (!source && target) {
+      plan.unmanagedTarget.push({ key, path: target.path })
+    } else if (source && target) {
+      plan.adopt.push({ key })
     }
   }
-  return data
+
+  return plan
 }
 
-function unquote(value) {
-  return value.replace(/^(['"])(.*)\1$/, '$2')
-}
+function buildSyncPlan(sourceFiles, targetFiles, manifestFiles) {
+  const plan = emptyPlan()
+  const keys = allKeys(sourceFiles, targetFiles, manifestFiles)
 
-function yamlScalar(value) {
-  if (/^[A-Za-z0-9_./:%?&=#@+-]+$/.test(value)) return value
-  return JSON.stringify(value)
-}
+  for (const key of keys) {
+    const source = sourceFiles.get(key)
+    const target = targetFiles.get(key)
+    const manifest = manifestFiles.get(key)
 
-function stringifyFrontmatter(data) {
-  const lines = []
-  if (data.draft !== undefined) lines.push(`draft: ${data.draft}`)
-  if ((data.base ?? []).length === 0) {
-    lines.push('base: []')
-  } else {
-    lines.push('base:')
-    for (const base of data.base) lines.push(`  - ${base}`)
+    if (!manifest) {
+      if (source && target) {
+        if (source.hash === target.hash) {
+          plan.adopt.push({ key })
+        } else {
+          plan.conflicts.push({
+            type: 'untracked-mismatch',
+            key,
+            reason: 'File exists on both sides but is not in the manifest.',
+          })
+        }
+      } else if (source) {
+        plan.copySourceToTarget.push({ key, from: source.path, to: targetPathFor(key) })
+      } else if (target) {
+        plan.unmanagedTarget.push({ key, path: target.path })
+      }
+      continue
+    }
+
+    if (!source && !target) {
+      plan.removeFromManifest.push({ key })
+      continue
+    }
+
+    if (!source && target) {
+      if (target.hash === manifest.targetHash) {
+        plan.deleteTarget.push({ key, path: target.path })
+      } else {
+        plan.conflicts.push({
+          type: 'source-deleted-target-changed',
+          key,
+          reason: 'Source was deleted and target changed since the last sync.',
+        })
+      }
+      continue
+    }
+
+    if (source && !target) {
+      if (source.hash === manifest.sourceHash) {
+        plan.deleteSource.push({ key, path: source.path })
+      } else {
+        plan.conflicts.push({
+          type: 'target-deleted-source-changed',
+          key,
+          reason: 'Target was deleted and source changed since the last sync.',
+        })
+      }
+      continue
+    }
+
+    const sourceChanged = source.hash !== manifest.sourceHash
+    const targetChanged = target.hash !== manifest.targetHash
+
+    if (sourceChanged && targetChanged) {
+      if (source.hash === target.hash) {
+        plan.adopt.push({ key })
+      } else {
+        plan.conflicts.push({
+          type: 'both-changed',
+          key,
+          reason: 'Both source and target changed since the last sync.',
+        })
+      }
+    } else if (sourceChanged) {
+      plan.copySourceToTarget.push({ key, from: source.path, to: target.path })
+    } else if (targetChanged) {
+      plan.copyTargetToSource.push({ key, from: target.path, to: source.path })
+    }
   }
-  if (data.youtubeId) lines.push(`youtubeId: ${yamlScalar(data.youtubeId)}`)
-  if (data.audioSrc) lines.push(`audioSrc: ${yamlScalar(data.audioSrc)}`)
-  if (data.audioTitle) lines.push(`audioTitle: ${yamlScalar(data.audioTitle)}`)
-  return lines.join('\n')
+
+  return plan
 }
 
-function validateMarkdownOnly(source, filePath) {
+function emptyPlan() {
+  return {
+    adopt: [],
+    copySourceToTarget: [],
+    copyTargetToSource: [],
+    deleteSource: [],
+    deleteTarget: [],
+    removeFromManifest: [],
+    unmanagedTarget: [],
+    conflicts: [],
+  }
+}
+
+function allKeys(...collections) {
+  const keys = new Set()
+  for (const collection of collections) {
+    for (const key of collection.keys()) keys.add(key)
+  }
+  return [...keys].sort()
+}
+
+function targetPathFor(key) {
+  return join(TARGET_ROOT, ...key.split('/'))
+}
+
+function planHasWork(plan) {
+  return (
+    plan.adopt.length > 0 ||
+    plan.copySourceToTarget.length > 0 ||
+    plan.copyTargetToSource.length > 0 ||
+    plan.deleteSource.length > 0 ||
+    plan.deleteTarget.length > 0 ||
+    plan.removeFromManifest.length > 0
+  )
+}
+
+function printPlan(plan) {
+  console.log(INIT ? 'Init plan:' : 'Sync plan:')
+  printGroup('Adopt unchanged files', plan.adopt, (item) => item.key)
+  printGroup('Copy source -> target', plan.copySourceToTarget, (item) => item.key)
+  printGroup('Copy target -> source', plan.copyTargetToSource, (item) => item.key)
+  printGroup('Delete source', plan.deleteSource, (item) => item.key)
+  printGroup('Delete target', plan.deleteTarget, (item) => item.key)
+  printGroup('Remove from manifest', plan.removeFromManifest, (item) => item.key)
+  printGroup('Unmanaged target files (skipped)', plan.unmanagedTarget, (item) => item.key)
+  printGroup('Conflicts', plan.conflicts, (item) => `${item.key} - ${item.reason}`)
+}
+
+function printGroup(label, items, format) {
+  if (items.length === 0) return
+  console.log(`\n${label}:`)
+  for (const item of items) console.log(`  - ${format(item)}`)
+}
+
+async function validatePlannedWrites(plan) {
+  const writes = [...plan.copySourceToTarget, ...plan.copyTargetToSource]
+  const errors = []
+
+  for (const item of writes) {
+    const source = await readFile(item.from, 'utf8')
+    const fileErrors = validateMarkdownOnly(source)
+    for (const error of fileErrors) errors.push(`${item.key}: ${error}`)
+  }
+
+  if (errors.length > 0) {
+    throw new Error(`Markdown-only validation failed:\n- ${errors.join('\n- ')}`)
+  }
+}
+
+function validateMarkdownOnly(source) {
   const errors = []
   const markdownBody = stripFencedCode(source)
+  const frontmatter = parseFrontmatter(source)
+  const data = parseFrontmatterData(frontmatter)
 
   if (/^\s*(?:import|export)\s/m.test(markdownBody)) {
     errors.push('import/export is not allowed')
@@ -304,47 +303,117 @@ function validateMarkdownOnly(source, filePath) {
   for (const match of markdownBody.matchAll(/::([A-Za-z][\w-]*)\b/g)) {
     errors.push(`unsupported directive: ${match[1]}`)
   }
-  const { matter } = splitFrontmatter(source)
-  const data = parseFrontmatter(matter)
-  if (data.media !== undefined) errors.push('media frontmatter is not allowed')
-  if (data.youtubeId && data.audioSrc) errors.push('youtubeId and audioSrc cannot be used together')
-  if (data.youtubeId && !/^[A-Za-z0-9_-]{11}$/.test(data.youtubeId)) errors.push(`invalid YouTube id: ${data.youtubeId}`)
-  if (data.audioSrc && !isSafeAudioSrc(data.audioSrc)) errors.push(`invalid audio src: ${data.audioSrc}`)
-  if (data.audioSrc && !data.audioTitle?.trim()) errors.push('audioTitle required')
+  if (data.media !== undefined) {
+    errors.push('media frontmatter is no longer supported')
+  }
+  if (data.youtubeId && data.audioSrc) {
+    errors.push('youtubeId and audioSrc cannot be used together')
+  }
+  if (data.youtubeId && !YOUTUBE_ID_RE.test(data.youtubeId)) {
+    errors.push(`invalid YouTube id: ${data.youtubeId}`)
+  }
+  if (data.audioSrc && !isSafeAudioSrc(data.audioSrc)) {
+    errors.push(`invalid audio src: ${data.audioSrc}`)
+  }
+  if (data.audioSrc && !data.audioTitle?.trim()) {
+    errors.push('audioTitle is required when audioSrc is set')
+  }
   if (!data.audioSrc && data.audioTitle !== undefined) {
     errors.push('audioTitle requires audioSrc')
   }
 
-  if (errors.length > 0) {
-    throw new Error(`Markdown-only validation failed for ${filePath}:\n- ${errors.join('\n- ')}`)
-  }
+  return errors
 }
 
-function isSafeAudioSrc(value) {
-  if (value.startsWith('/') && !value.startsWith('//') && !/[^\S\r\n]/.test(value)) return true
-  try {
-    return new URL(value).protocol === 'https:'
-  } catch {
-    return false
+function stripFencedCode(source) {
+  return source.replace(/(^|\n)(`{3,}|~{3,})[\s\S]*?\n\2(?=\n|$)/g, '$1')
+}
+
+function parseFrontmatter(source) {
+  const open = source.match(/^---\r?\n/)
+  if (!open) return ''
+  const closeRe = /\r?\n---(?:\r?\n|$)/g
+  closeRe.lastIndex = open[0].length
+  const close = closeRe.exec(source)
+  if (!close) return ''
+  return source.slice(open[0].length, close.index)
+}
+
+function parseFrontmatterData(frontmatter) {
+  const data = {}
+  for (const line of frontmatter.split(/\r?\n/)) {
+    const scalar = line.match(/^([A-Za-z][\w-]*):\s*(.*?)\s*$/)
+    if (!scalar) continue
+    data[scalar[1]] = unquote(scalar[2])
+  }
+  return data
+}
+
+function unquote(value) {
+  return value.replace(/^(['"])(.*)\1$/, '$2')
+}
+
+async function applyPlan(plan) {
+  for (const item of plan.copySourceToTarget) await copyMarkdownFile(item.from, item.to)
+  for (const item of plan.copyTargetToSource) await copyMarkdownFile(item.from, item.to)
+  for (const item of plan.deleteSource) await rm(item.path)
+  for (const item of plan.deleteTarget) await rm(item.path)
+}
+
+async function copyMarkdownFile(from, to) {
+  await mkdir(dirname(to), { recursive: true })
+  await copyFile(from, to)
+}
+
+async function buildManifestFromCurrentState() {
+  const sourceFiles = await scanMarkdownFiles(SOURCE_ROOT)
+  const targetFiles = await scanMarkdownFiles(TARGET_ROOT)
+  const files = {}
+  const now = new Date().toISOString()
+
+  for (const key of allKeys(sourceFiles, targetFiles)) {
+    const source = sourceFiles.get(key)
+    const target = targetFiles.get(key)
+    if (!source || !target || source.hash !== target.hash) continue
+    files[key] = {
+      sourceHash: source.hash,
+      targetHash: target.hash,
+      lastSyncedAt: now,
+    }
+  }
+
+  return {
+    version: MANIFEST_VERSION,
+    sourceRoot: SOURCE_ROOT,
+    targetRoot: TARGET_ROOT,
+    files,
   }
 }
 
 async function loadManifest() {
-  if (!existsSync(MANIFEST_PATH)) return []
-  try {
-    const obj = JSON.parse(await readFile(MANIFEST_PATH, 'utf8'))
-    return Array.isArray(obj.files) ? obj.files : []
-  } catch {
-    return []
+  if (!existsSync(MANIFEST_PATH)) {
+    return { version: MANIFEST_VERSION, files: new Map() }
+  }
+
+  const raw = JSON.parse(await readFile(MANIFEST_PATH, 'utf8'))
+  if (raw.version !== MANIFEST_VERSION || !raw.files || Array.isArray(raw.files)) {
+    throw new Error(`Unsupported sync manifest schema: ${MANIFEST_PATH}. Run sync with --init to create a new manifest.`)
+  }
+
+  return {
+    version: raw.version,
+    sourceRoot: raw.sourceRoot,
+    targetRoot: raw.targetRoot,
+    files: new Map(Object.entries(raw.files)),
   }
 }
 
-async function saveCurrentManifest(publishSet, vercelSet) {
-  const files = [...publishSet].filter((name) => vercelSet.has(name)).sort()
-  await writeFile(MANIFEST_PATH, JSON.stringify({ files }, null, 2), 'utf8')
+async function saveManifest(manifest) {
+  await mkdir(dirname(MANIFEST_PATH), { recursive: true })
+  await writeFile(MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
 }
 
 main().catch((error) => {
-  console.error(error)
-  process.exit(1)
+  console.error(error.message ?? error)
+  exit(1)
 })
