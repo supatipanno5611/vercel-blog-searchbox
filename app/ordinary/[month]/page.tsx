@@ -98,3 +98,9 @@ export default async function OrdinaryMonthPage({ params }: Props) {
     </main>
   )
 }
+
+export async function generateMetadata({ params }: Props) {
+  const { month } = await params
+  if (!isValidMonth(month)) return {}
+  return { description: monthLabel(month) }
+}

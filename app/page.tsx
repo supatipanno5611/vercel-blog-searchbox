@@ -52,3 +52,9 @@ export default function HomePage() {
     </main>
   )
 }
+
+export function generateMetadata() {
+  return {
+    description: siteConfig.description || siteConfig.title,
+  }
+}

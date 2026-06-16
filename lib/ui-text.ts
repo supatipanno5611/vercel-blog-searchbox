@@ -126,4 +126,10 @@ export const uiText = {
     previousMonth: '이전 달',
     nextMonth: '다음 달',
   },
+  meta: {
+    search: '제목, 본문, 주제어로 글을 검색합니다.',
+    topicSearch: '주제어로 글을 둘러봅니다.',
+    topic: (topic: string) => `${topic} 주제어의 글 모음`,
+    indexes: '목차가 있는 글 목록',
+  },
 } as const

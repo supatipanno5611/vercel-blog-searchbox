@@ -35,3 +35,7 @@ export default function IndexesPage() {
     </main>
   )
 }
+
+export function generateMetadata() {
+  return { description: uiText.meta.indexes }
+}

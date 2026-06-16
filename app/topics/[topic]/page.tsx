@@ -5,6 +5,7 @@ import { getAllTopics, getPostsByTopic } from '@/lib/topics'
 import { publicPathForPost } from '@/lib/ordinary'
 import { getCuratedTopics } from '@/lib/curatedTopics'
 import TopicsClient from './TopicsClient'
+import { uiText } from '@/lib/ui-text'
 
 type Props = {
   params: Promise<{ topic: string }>
@@ -12,6 +13,13 @@ type Props = {
 
 export async function generateStaticParams() {
   return getAllTopics().map(({ name }) => ({ topic: name }))
+}
+
+export async function generateMetadata({ params }: Props) {
+  const { topic } = await params
+  const decodedTopic = safeDecodeURIComponent(topic)
+  if (!decodedTopic) return {}
+  return { description: uiText.meta.topic(decodedTopic) }
 }
 
 export default async function TopicPage({ params }: Props) {

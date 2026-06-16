@@ -26,3 +26,12 @@ export default async function OrdinaryPostPage({ params }: Props) {
 
   return <PostDetail post={post} />
 }
+
+export async function generateMetadata({ params }: Props) {
+  const { slug } = await params
+  const decodedSlug = safeDecodeURIComponent(slug)
+  if (decodedSlug === null) return {}
+  const post = posts.find((candidate) => isOrdinaryPath(candidate.slug) && ordinaryEntrySlug(candidate.slugAsParams) === decodedSlug)
+  if (!post) return {}
+  return { description: post.title }
+}
