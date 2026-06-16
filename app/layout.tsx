@@ -8,6 +8,10 @@ import './globals.css'
 export const metadata: Metadata = {
   title: siteConfig.title,
   description: siteConfig.description,
+  openGraph: {
+    title: siteConfig.title,
+    description: siteConfig.description || siteConfig.title,
+  },
 }
 
 export const viewport: Viewport = {

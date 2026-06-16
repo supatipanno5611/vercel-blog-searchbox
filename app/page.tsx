@@ -8,6 +8,7 @@ import { isHomeLinkPagePath } from '@/lib/home-link-pages'
 import { uiText } from '@/lib/ui-text'
 import { siteConfig } from '@/site.config'
 import styles from './page.module.css'
+import { dynamicMetadata } from '@/lib/metadata'
 
 export default function HomePage() {
   const home = posts.find((p) => p.slugAsParams === siteConfig.homeSlug)
@@ -54,7 +55,5 @@ export default function HomePage() {
 }
 
 export function generateMetadata() {
-  return {
-    description: siteConfig.description || siteConfig.title,
-  }
+  return dynamicMetadata(siteConfig.title)
 }

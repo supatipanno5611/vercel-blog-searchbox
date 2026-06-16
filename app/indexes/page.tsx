@@ -3,6 +3,7 @@ import { posts } from '#site/content'
 import LocalHeader from '@/app/components/LocalHeader'
 import { uiText } from '@/lib/ui-text'
 import styles from './page.module.css'
+import { staticMetadata } from '@/lib/metadata'
 
 function compareByTitle(a: (typeof posts)[number], b: (typeof posts)[number]) {
   return a.title.localeCompare(b.title, 'ko')
@@ -37,5 +38,5 @@ export default function IndexesPage() {
 }
 
 export function generateMetadata() {
-  return { description: uiText.meta.indexes }
+  return staticMetadata(uiText.meta.indexes)
 }

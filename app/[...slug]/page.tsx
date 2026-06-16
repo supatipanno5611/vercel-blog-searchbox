@@ -3,6 +3,7 @@ import { posts } from '#site/content'
 import PostDetail from '@/app/components/PostDetail'
 import { isOrdinaryPath } from '@/lib/ordinary'
 import { safeDecodeURIComponent } from '@/lib/safe-decode'
+import { dynamicMetadata } from '@/lib/metadata'
 
 type Props = {
   params: Promise<{ slug: string[] }>
@@ -31,7 +32,7 @@ export async function generateStaticParams() {
 export async function generateMetadata({ params }: Props) {
   const post = await resolvePost(params)
   if (!post) return {}
-  return { description: post.title }
+  return dynamicMetadata(post.title)
 }
 
 export default async function PostPage({ params }: Props) {

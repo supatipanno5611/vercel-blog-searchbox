@@ -16,6 +16,7 @@ import {
 import { siteConfig } from '@/site.config'
 import { uiText } from '@/lib/ui-text'
 import styles from './page.module.css'
+import { dynamicMetadata } from '@/lib/metadata'
 
 type Props = {
   params: Promise<{ month: string }>
@@ -102,5 +103,5 @@ export default async function OrdinaryMonthPage({ params }: Props) {
 export async function generateMetadata({ params }: Props) {
   const { month } = await params
   if (!isValidMonth(month)) return {}
-  return { description: monthLabel(month) }
+  return dynamicMetadata(monthLabel(month))
 }

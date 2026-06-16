@@ -3,6 +3,7 @@ import { getAllTopics, getAllPosts } from '@/lib/topics'
 import { getCuratedTopics } from '@/lib/curatedTopics'
 import TopicsClient from '../[topic]/TopicsClient'
 import { uiText } from '@/lib/ui-text'
+import { staticMetadata } from '@/lib/metadata'
 
 export default function TopicsSearchPage() {
   return (
@@ -13,5 +14,5 @@ export default function TopicsSearchPage() {
 }
 
 export function generateMetadata() {
-  return { description: uiText.meta.topicSearch }
+  return staticMetadata(uiText.meta.topicSearch)
 }

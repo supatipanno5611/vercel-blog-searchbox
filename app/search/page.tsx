@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 import SearchPageClient from './SearchPageClient'
 import { uiText } from '@/lib/ui-text'
+import { staticMetadata } from '@/lib/metadata'
 
 export default function SearchPage() {
   return (
@@ -11,5 +12,5 @@ export default function SearchPage() {
 }
 
 export function generateMetadata() {
-  return { description: uiText.meta.search }
+  return staticMetadata(uiText.meta.search)
 }

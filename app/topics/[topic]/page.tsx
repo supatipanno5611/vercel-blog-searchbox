@@ -6,6 +6,7 @@ import { publicPathForPost } from '@/lib/ordinary'
 import { getCuratedTopics } from '@/lib/curatedTopics'
 import TopicsClient from './TopicsClient'
 import { uiText } from '@/lib/ui-text'
+import { dynamicMetadata } from '@/lib/metadata'
 
 type Props = {
   params: Promise<{ topic: string }>
@@ -19,7 +20,7 @@ export async function generateMetadata({ params }: Props) {
   const { topic } = await params
   const decodedTopic = safeDecodeURIComponent(topic)
   if (!decodedTopic) return {}
-  return { description: uiText.meta.topic(decodedTopic) }
+  return dynamicMetadata(uiText.meta.topic(decodedTopic))
 }
 
 export default async function TopicPage({ params }: Props) {

@@ -4,6 +4,7 @@ import PostDetail from '@/app/components/PostDetail'
 import { isOrdinaryPath, ordinaryEntrySlug } from '@/lib/ordinary'
 import { safeDecodeURIComponent } from '@/lib/safe-decode'
 import { siteConfig } from '@/site.config'
+import { dynamicMetadata } from '@/lib/metadata'
 
 type Props = {
   params: Promise<{ slug: string }>
@@ -33,5 +34,5 @@ export async function generateMetadata({ params }: Props) {
   if (decodedSlug === null) return {}
   const post = posts.find((candidate) => isOrdinaryPath(candidate.slug) && ordinaryEntrySlug(candidate.slugAsParams) === decodedSlug)
   if (!post) return {}
-  return { description: post.title }
+  return dynamicMetadata(post.title)
 }
